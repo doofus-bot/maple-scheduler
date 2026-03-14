@@ -6,17 +6,17 @@ import Database from "better-sqlite3";
 import fetch from "node-fetch";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
- 
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
- 
+
 /* ════════════════════════════════════════
    DATABASE
    ════════════════════════════════════════ */
 const db = new Database(join(__dirname, "..", "data.db"));
 db.pragma("journal_mode = WAL");
- 
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -27,21 +27,21 @@ db.exec(`
     availability TEXT DEFAULT '{}',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
- 
+
   CREATE TABLE IF NOT EXISTS parties_store (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     data TEXT DEFAULT '{}'
   );
- 
+
   INSERT OR IGNORE INTO parties_store (id, data) VALUES (1, '{}');
 `);
- 
+
 /* ════════════════════════════════════════
    MIDDLEWARE
    ════════════════════════════════════════ */
 app.use(compression());
 app.use(express.json({ limit: "5mb" }));
- 
+
 app.use(session({
   secret: process.env.SESSION_SECRET || "change-me",
   resave: false,
@@ -53,11 +53,11 @@ app.use(session({
     sameSite: "lax",
   },
 }));
- 
+
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
- 
+
 /* ════════════════════════════════════════
    DISCORD OAUTH
    ════════════════════════════════════════ */
@@ -65,7 +65,7 @@ const DISCORD_API = "https://discord.com/api/v10";
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
- 
+
 app.get("/auth/discord", (req, res) => {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -75,7 +75,7 @@ app.get("/auth/discord", (req, res) => {
   });
   res.redirect(`${DISCORD_API}/oauth2/authorize?${params}`);
 });
- 
+
 app.get("/auth/discord/callback", async (req, res) => {
   const { code } = req.query;
   if (!code) return res.redirect("/?error=no_code");
@@ -90,13 +90,13 @@ app.get("/auth/discord/callback", async (req, res) => {
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("No access token");
- 
+
     const userRes = await fetch(`${DISCORD_API}/users/@me`, {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const d = await userRes.json();
     const avatarUrl = d.avatar ? `https://cdn.discordapp.com/avatars/${d.id}/${d.avatar}.png` : null;
- 
+
     const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(d.id);
     if (!existing) {
       db.prepare("INSERT INTO users (id, username, avatar) VALUES (?, ?, ?)").run(d.id, d.username, avatarUrl);
@@ -110,10 +110,10 @@ app.get("/auth/discord/callback", async (req, res) => {
     res.redirect("/?error=auth_failed");
   }
 });
- 
+
 app.get("/auth/logout", (req, res) => { req.session.destroy(() => res.redirect("/")); });
 app.post("/auth/logout", (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
- 
+
 /* ════════════════════════════════════════
    AUTH MIDDLEWARE
    ════════════════════════════════════════ */
@@ -123,7 +123,7 @@ function requireAuth(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "User not found" });
   next();
 }
- 
+
 /* ════════════════════════════════════════
    API: USERS
    ════════════════════════════════════════ */
@@ -132,7 +132,7 @@ app.get("/api/me", requireAuth, (req, res) => {
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
     characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") });
 });
- 
+
 app.patch("/api/me", requireAuth, (req, res) => {
   const { timezone, characters, availability } = req.body;
   if (timezone) db.prepare("UPDATE users SET timezone = ? WHERE id = ?").run(timezone, req.user.id);
@@ -142,12 +142,12 @@ app.patch("/api/me", requireAuth, (req, res) => {
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
     characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") });
 });
- 
+
 app.get("/api/users", requireAuth, (req, res) => {
   const rows = db.prepare("SELECT id, username, avatar, timezone, characters, availability FROM users").all();
   res.json(rows.map(u => ({ ...u, characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") })));
 });
- 
+
 /* ════════════════════════════════════════
    API: PARTIES (single JSON blob)
    ════════════════════════════════════════ */
@@ -155,12 +155,12 @@ app.get("/api/parties", requireAuth, (req, res) => {
   const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
   res.json(JSON.parse(row?.data || "{}"));
 });
- 
+
 app.put("/api/parties", requireAuth, (req, res) => {
   db.prepare("UPDATE parties_store SET data = ? WHERE id = 1").run(JSON.stringify(req.body));
   res.json({ ok: true });
 });
- 
+
 /* ════════════════════════════════════════
    API: NEXON CHARACTER LOOKUP
    ════════════════════════════════════════ */
@@ -182,14 +182,17 @@ app.get("/api/nexon/:name", async (req, res) => {
     res.json({ imgUrl: null, jobName: null, characterName: name });
   }
 });
- 
+
 /* ════════════════════════════════════════
    SERVE FRONTEND
    ════════════════════════════════════════ */
+// Always serve public/ for logo.png etc
+app.use(express.static(join(__dirname, "..", "public")));
+
 if (process.env.NODE_ENV === "production") {
   const distPath = join(__dirname, "..", "dist");
   app.use(express.static(distPath));
   app.get("*", (req, res) => res.sendFile(join(distPath, "index.html")));
 }
- 
-app.listen(PORT, () => console.log(`🚀 Boss Organizer running on port ${PORT}`));
+
+app.listen(PORT, () => console.log(`🍄 Maple Scheduler running on port ${PORT}`));
