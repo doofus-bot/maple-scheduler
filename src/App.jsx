@@ -56,11 +56,9 @@ const BOSS_DROPS = {
   "Other": [],
 };
 
-// Characters view order (weakest → strongest)
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
-
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
-const DIFF_COLORS = { Easy: "#3a9e6a", Normal: "#5b8dd9", Hard: "#e07b39", Chaos: "#c9393a", Extreme: "#9b59b6" };
+const DIFF_COLORS = { Easy: "#858585", Normal: "#32AAB0", Hard: "#B93062", Chaos: "#EA6C2B", Extreme: "#EA6C2B" };
 
 function getMaxParty(bossName, diff) {
   if (bossName === "Lotus" && diff === "Extreme") return 2;
@@ -165,11 +163,11 @@ function IGNPopup({ title, hint, onConfirm, onClose }) {
 /* ════════════════════════════════════════════════════════════
    CREATE PARTY MODAL
    ════════════════════════════════════════════════════════════ */
-function CreatePartyModal({ onClose, onSave, currentUser }) {
-  const [boss, setBoss] = useState("");
-  const [diff, setDiff] = useState("");
-  const [day, setDay] = useState("Monday");
-  const [time, setTime] = useState("20:00");
+function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDiff, defaultChar }) {
+  const [boss, setBoss] = useState(defaultBoss || "");
+  const [diff, setDiff] = useState(defaultDiff || "");
+  const [day, setDay] = useState("");
+  const [time, setTime] = useState("");
   const [members, setMembers] = useState([]);
   const [discordInput, setDiscordInput] = useState("");
   const [ignPopup, setIgnPopup] = useState(null);
@@ -178,10 +176,9 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
   const maxParty = boss && diff ? getMaxParty(boss, diff) : 6;
 
   useEffect(() => {
-    if (currentUser && members.length === 0 && currentUser.characters?.length > 0) {
-      setMembers([{ userId: currentUser.id, charName: currentUser.characters[0], isTemp: false, isLead: true }]);
-    } else if (currentUser && members.length === 0) {
-      setMembers([{ userId: currentUser.id, charName: currentUser.username, isTemp: false, isLead: true }]);
+    if (currentUser && members.length === 0) {
+      const charName = defaultChar || (currentUser.characters?.length > 0 ? currentUser.characters[0] : currentUser.username);
+      setMembers([{ userId: currentUser.id, charName, isTemp: false, isLead: true }]);
     }
   }, [currentUser]);
 
@@ -190,11 +187,7 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
     if (!name || members.length >= maxParty) return;
     setIgnPopup({ type: "discord", discordName: name });
   };
-
-  const openIgnForTemp = () => {
-    if (members.length >= maxParty) return;
-    setIgnPopup({ type: "temp" });
-  };
+  const openIgnForTemp = () => { if (members.length >= maxParty) return; setIgnPopup({ type: "temp" }); };
 
   const handleIgnResult = (ign) => {
     if (ignPopup.type === "discord") {
@@ -208,18 +201,20 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
   };
 
   const removeMember = i => setMembers(prev => prev.filter((_, j) => j !== i));
-
   const drops = boss && diff ? getDropsForBoss(boss, diff) : [];
 
   const save = () => {
-    if (!boss || !diff) return;
+    if (!boss || (!diff && boss !== "Other")) return;
+    const hasSchedule = day && time;
     onSave({
       id: Date.now().toString(36),
       leaderId: currentUser.id,
       members,
       maxMembers: maxParty,
       bosses: [{ id: "b0", bossName: boss, difficulty: diff }],
-      utcDay: DAYS.indexOf(day), utcHour: parseInt(time.split(":")[0]), utcMin: parseInt(time.split(":")[1]),
+      utcDay: hasSchedule ? DAYS.indexOf(day) : null,
+      utcHour: hasSchedule ? parseInt(time.split(":")[0]) : null,
+      utcMin: hasSchedule ? parseInt(time.split(":")[1]) : null,
       notes: "",
       drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: "blink", eligible: members.map(m => m.userId) })),
     });
@@ -233,7 +228,6 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <div style={S.modalBody}>
-          {/* Boss + Difficulty */}
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
               <label style={S.label}>Boss</label>
@@ -246,28 +240,27 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
               <label style={S.label}>Difficulty</label>
               <select style={{ ...S.select, width: "100%" }} value={diff} onChange={e => setDiff(e.target.value)} disabled={!boss}>
                 <option value="">Select</option>
-                {bossObj?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
+                {bossObj?.diffs.map(d => <option key={d} value={d}>{d || "Default"}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Max party display */}
           {boss && diff && (
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, fontFamily: "'Nunito', sans-serif" }}>
               Max party size: <span style={{ color: "#c9a227", fontWeight: 700 }}>{maxParty}</span>
             </div>
           )}
 
-          {/* Schedule */}
           <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
             <div style={{ flex: 1 }}>
-              <label style={S.label}>Day</label>
+              <label style={S.label}>Day <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>(optional)</span></label>
               <select style={{ ...S.select, width: "100%" }} value={day} onChange={e => setDay(e.target.value)}>
+                <option value="">Not set</option>
                 {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div style={{ flex: 1 }}>
-              <label style={S.label}>Time</label>
+              <label style={S.label}>Time <span style={{ color: "#475569", textTransform: "none", fontWeight: 400 }}>(optional)</span></label>
               <input type="time" style={{ ...S.input, width: "100%" }} value={time} onChange={e => setTime(e.target.value)} />
             </div>
           </div>
@@ -286,7 +279,6 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
               onClick={openIgnForTemp}>👤 Add Temp</button>
           </div>
 
-          {/* Member chips */}
           {members.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <label style={S.label}>Party Members ({members.length}/{maxParty})</label>
@@ -297,8 +289,8 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
                     background: m.isTemp ? "rgba(251,191,36,0.08)" : "rgba(201,162,39,0.08)",
                     border: `1px solid ${m.isTemp ? "rgba(251,191,36,0.2)" : "rgba(201,162,39,0.2)"}`,
                   }}>
-                    <span style={{ fontWeight: 600 }}>{m.isTemp ? `🕐 ${m.charName}` : m.userId === m.charName ? m.userId : `${m.userId}`}</span>
-                    {!m.isTemp && <span style={{ color: "#64748b", fontSize: 11 }}>({m.charName === "TBD" ? <span style={{ color: "#f87171" }}>TBD</span> : m.charName})</span>}
+                    <span style={{ fontWeight: 600 }}>{m.isTemp ? `🕐 ${m.charName}` : m.userId === currentUser?.id ? m.charName : m.userId}</span>
+                    {!m.isTemp && m.userId !== currentUser?.id && <span style={{ color: "#64748b", fontSize: 11 }}>({m.charName === "TBD" ? <span style={{ color: "#f87171" }}>TBD</span> : m.charName})</span>}
                     {m.isTemp && <span style={S.tempBadge}>TEMP</span>}
                     {m.isLead && <span style={S.leadBadge}>LEAD</span>}
                     {!m.isLead && <button onClick={() => removeMember(i)} style={{ width: 16, height: 16, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,0.2)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✕</button>}
@@ -308,24 +300,20 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
             </div>
           )}
 
-          {/* Drops preview */}
           {drops.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <label style={S.label}>Drops for {boss} ({diff})</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                 {drops.map((d, i) => (
-                  <span key={i} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontFamily: "'Nunito', sans-serif", background: "rgba(201,162,39,0.1)", border: "1px solid rgba(201,162,39,0.2)", color: "#c9a227" }}>
-                    {d.name}
-                  </span>
+                  <span key={i} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontFamily: "'Nunito', sans-serif", background: "rgba(201,162,39,0.1)", border: "1px solid rgba(201,162,39,0.2)", color: "#c9a227" }}>{d.name}</span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
             <button style={S.btnGhost} onClick={onClose}>Cancel</button>
-            <button style={{ ...S.btnPrimary, opacity: boss && diff ? 1 : 0.4, pointerEvents: boss && diff ? "auto" : "none" }} onClick={save}>Create Party</button>
+            <button style={{ ...S.btnPrimary, opacity: boss && (diff || boss === "Other") ? 1 : 0.4, pointerEvents: boss && (diff || boss === "Other") ? "auto" : "none" }} onClick={save}>Create Party</button>
           </div>
         </div>
       </div>
@@ -341,7 +329,7 @@ function CreatePartyModal({ onClose, onSave, currentUser }) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   PROFILE MODAL — with character management + availability
+   PROFILE MODAL
    ════════════════════════════════════════════════════════════ */
 function ProfileModal({ user, onClose, onSave }) {
   const [tz, setTz] = useState(user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -351,24 +339,16 @@ function ProfileModal({ user, onClose, onSave }) {
   const [painting, setPainting] = useState(null);
   const gridRef = useRef(null);
 
-  const addChar = () => {
-    const name = newChar.trim();
-    if (name && !chars.includes(name)) { setChars(prev => [...prev, name]); setNewChar(""); }
-  };
+  const addChar = () => { const name = newChar.trim(); if (name && !chars.includes(name)) { setChars(prev => [...prev, name]); setNewChar(""); } };
   const removeChar = (i) => setChars(prev => prev.filter((_, j) => j !== i));
 
-  // Availability: 7 days × 48 half-hour slots, stored as { "day-slot": "available"|"unavailable" }
   const getSlot = (e) => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const headerH = 24;
-    const labelW = 40;
-    const cellW = (rect.width - labelW) / 7;
-    const cellH = (rect.height - headerH) / 48;
-    const day = Math.floor((x - labelW) / cellW);
-    const slot = Math.floor((y - headerH) / cellH);
+    const day = Math.floor((x - 40) / ((rect.width - 40) / 7));
+    const slot = Math.floor((y - 24) / ((rect.height - 24) / 48));
     if (day < 0 || day > 6 || slot < 0 || slot > 47) return null;
     return { day, slot };
   };
@@ -381,28 +361,17 @@ function ProfileModal({ user, onClose, onSave }) {
     const cur = avail[key];
     const next = !cur ? "available" : cur === "available" ? "unavailable" : undefined;
     setPainting(next);
-    setAvail(prev => {
-      const copy = { ...prev };
-      if (next === undefined) delete copy[key]; else copy[key] = next;
-      return copy;
-    });
+    setAvail(prev => { const c = { ...prev }; if (next === undefined) delete c[key]; else c[key] = next; return c; });
   };
-
   const onMove = (e) => {
     if (painting === null) return;
     const pos = getSlot(e);
     if (!pos) return;
     const key = `${pos.day}-${pos.slot}`;
-    setAvail(prev => {
-      const copy = { ...prev };
-      if (painting === undefined) delete copy[key]; else copy[key] = painting;
-      return copy;
-    });
+    setAvail(prev => { const c = { ...prev }; if (painting === undefined) delete c[key]; else c[key] = painting; return c; });
   };
-
   const onUp = () => setPainting(null);
 
-  // UTC reset line (0:00 UTC in local time)
   const offsetMin = new Date().getTimezoneOffset();
   const resetSlot = Math.round(-offsetMin / 30);
   const resetSlotNorm = ((resetSlot % 48) + 48) % 48;
@@ -415,7 +384,6 @@ function ProfileModal({ user, onClose, onSave }) {
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
         <div style={S.modalBody}>
-          {/* Discord + Timezone */}
           <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
             <div style={{ flex: 1 }}>
               <label style={S.label}>Discord</label>
@@ -429,7 +397,6 @@ function ProfileModal({ user, onClose, onSave }) {
             </div>
           </div>
 
-          {/* Characters */}
           <div style={{ marginBottom: 20 }}>
             <label style={S.label}>Your Characters (IGNs)</label>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -447,23 +414,18 @@ function ProfileModal({ user, onClose, onSave }) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "#475569", fontFamily: "'Nunito', sans-serif" }}>No characters added yet. Add your MapleStory IGNs above.</div>
+              <div style={{ fontSize: 13, color: "#475569", fontFamily: "'Nunito', sans-serif" }}>No characters added yet.</div>
             )}
           </div>
 
-          {/* Availability Grid */}
           <label style={S.label}>Availability (click & drag — green = available, red = unavailable, click again to clear)</label>
           <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontFamily: "'Nunito', sans-serif" }}>Red dashed line = 0:00 UTC (GMS Daily Reset)</div>
           <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: "crosshair", background: "rgba(11,14,26,0.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "hidden", height: 420 }}
             onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
-            {/* Day headers */}
             <div style={{ display: "flex", height: 24 }}>
               <div style={{ width: 40, flexShrink: 0 }} />
-              {DAYS_SHORT.map(d => (
-                <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Nunito', sans-serif" }}>{d}</div>
-              ))}
+              {DAYS_SHORT.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Nunito', sans-serif" }}>{d}</div>)}
             </div>
-            {/* Grid body */}
             <div style={{ display: "flex", height: 396 }}>
               <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
                 {Array.from({ length: 24 }, (_, h) => (
@@ -475,27 +437,14 @@ function ProfileModal({ user, onClose, onSave }) {
               {Array.from({ length: 7 }, (_, dayIdx) => (
                 <div key={dayIdx} style={{ flex: 1, display: "flex", flexDirection: "column", borderLeft: "1px solid rgba(255,255,255,0.03)" }}>
                   {Array.from({ length: 48 }, (_, slotIdx) => {
-                    const key = `${dayIdx}-${slotIdx}`;
-                    const val = avail[key];
-                    return (
-                      <div key={slotIdx} style={{
-                        flex: 1, minHeight: 0,
-                        background: val === "available" ? "rgba(34,197,94,0.35)" : val === "unavailable" ? "rgba(239,68,68,0.3)" : "transparent",
-                        borderBottom: slotIdx % 2 === 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
-                      }} />
-                    );
+                    const val = avail[`${dayIdx}-${slotIdx}`];
+                    return <div key={slotIdx} style={{ flex: 1, minHeight: 0, background: val === "available" ? "rgba(34,197,94,0.35)" : val === "unavailable" ? "rgba(239,68,68,0.3)" : "transparent", borderBottom: slotIdx % 2 === 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }} />;
                   })}
                 </div>
               ))}
             </div>
-            {/* UTC reset line */}
-            <div style={{
-              position: "absolute", left: 40, right: 0, top: 24 + (resetSlotNorm / 48) * 396,
-              height: 0, borderTop: "2px dashed rgba(239,68,68,0.6)", pointerEvents: "none",
-            }}>
-              <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,0.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Nunito', sans-serif" }}>
-                0:00 UTC — GMS Reset
-              </span>
+            <div style={{ position: "absolute", left: 40, right: 0, top: 24 + (resetSlotNorm / 48) * 396, height: 0, borderTop: "2px dashed rgba(239,68,68,0.6)", pointerEvents: "none" }}>
+              <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,0.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Nunito', sans-serif" }}>0:00 UTC — GMS Reset</span>
             </div>
           </div>
 
@@ -523,73 +472,54 @@ function PartyCard({ party, onDelete, currentUser }) {
     <div style={{ ...S.card, borderLeft: `3px solid ${diffColor}`, ...(hover ? { transform: "translateY(-2px)", boxShadow: `0 8px 32px ${diffColor}22` } : {}) }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2440" }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{boss?.bossName || "Unknown"}</div>
-        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{boss?.bossName || "Unknown"}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: `${diffColor}22`, color: diffColor }}>
-            {boss?.difficulty || "?"}
-          </span>
-          {isLead && (
-            <button onClick={() => onDelete(party.id)} style={{ width: 24, height: 24, borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,0.12)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑</button>
-          )}
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty || "?"}</span>
+          {isLead && <button onClick={() => onDelete(party.id)} style={{ width: 24, height: 24, borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,0.12)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑</button>}
         </div>
       </div>
       <div style={{ padding: "12px 18px" }}>
         {party.members?.map((m, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: i < party.members.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-              background: m.isTemp ? "linear-gradient(135deg, #d97706, #f59e0b)" : `linear-gradient(135deg, ${diffColor}, ${diffColor}99)`,
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff",
-            }}>{m.isTemp ? "T" : (m.charName?.[0] || "?").toUpperCase()}</div>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: m.isTemp ? "linear-gradient(135deg, #d97706, #f59e0b)" : `linear-gradient(135deg, ${diffColor}, ${diffColor}99)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff" }}>
+              {m.isTemp ? "T" : (m.charName?.[0] || "?").toUpperCase()}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Nunito', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                 {m.charName || m.userId}
                 {m.isTemp && <span style={S.tempBadge}>TEMP</span>}
                 {!m.isTemp && m.charName === "TBD" && <span style={S.tbdBadge}>IGN TBD</span>}
               </div>
-              {!m.isTemp && m.charName !== m.userId && <div style={{ fontSize: 11, color: "#64748b" }}>{m.userId}</div>}
             </div>
             {i === 0 && <span style={S.leadBadge}>LEAD</span>}
           </div>
         ))}
-        {(!party.members || party.members.length === 0) && (
-          <div style={{ fontSize: 13, color: "#475569", padding: "8px 0", fontFamily: "'Nunito', sans-serif" }}>No members yet</div>
-        )}
-
-        {/* Drops */}
         {drops.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
             {drops.map((d, i) => (
-              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(201,162,39,0.08)", color: "#c9a227", border: "1px solid rgba(201,162,39,0.15)", fontFamily: "'Nunito', sans-serif" }}>
-                {d.name}
-              </span>
+              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(201,162,39,0.08)", color: "#c9a227", border: "1px solid rgba(201,162,39,0.15)", fontFamily: "'Nunito', sans-serif" }}>{d.name}</span>
             ))}
           </div>
         )}
-
-        {/* Schedule */}
-        {party.utcDay != null && (
+        {party.utcDay != null ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,39,0.06)", fontSize: 12, color: "#94a3b8", fontFamily: "'Nunito', sans-serif" }}>
-            <span>🕐</span>
-            <span>{DAYS[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</span>
+            <span>🕐</span><span>{DAYS[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", fontSize: 12, color: "#475569", fontFamily: "'Nunito', sans-serif" }}>
+            <span>🕐</span><span>Unscheduled</span>
           </div>
         )}
-
-        {/* Party size */}
-        <div style={{ fontSize: 11, color: "#475569", marginTop: 6, fontFamily: "'Nunito', sans-serif" }}>
-          {party.members?.length || 0}/{party.maxMembers || 6} members
-        </div>
+        <div style={{ fontSize: 11, color: "#475569", marginTop: 6, fontFamily: "'Nunito', sans-serif" }}>{party.members?.length || 0}/{party.maxMembers || 6} members</div>
       </div>
     </div>
   );
 }
 
 /* ════════════════════════════════════════════════════════════
-   CHARACTERS VIEW
+   CHARACTERS VIEW — with Create Party per row
    ════════════════════════════════════════════════════════════ */
-function CharactersView({ parties, user }) {
+function CharactersView({ parties, user, onCreateParty }) {
   const partyList = Object.values(parties || {});
   const chars = user.characters || [];
 
@@ -603,7 +533,7 @@ function CharactersView({ parties, user }) {
     );
   }
 
-  // Build grid: boss rows × character columns
+  // Find party for a character + boss at ANY difficulty
   const findParty = (charName, bossName) => {
     return partyList.find(p =>
       p.members?.some(m => m.charName?.toLowerCase() === charName.toLowerCase()) &&
@@ -616,42 +546,52 @@ function CharactersView({ parties, user }) {
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Nunito', sans-serif" }}>
         <thead>
           <tr>
-            <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "1px solid #1e2440", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 2 }}>Boss</th>
+            <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid #1e2440", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 2, minWidth: 140 }}>Boss</th>
             {chars.map(c => (
-              <th key={c} style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#c9a227", fontWeight: 700, borderBottom: "1px solid #1e2440", fontFamily: "'Cinzel', serif", minWidth: 120 }}>{c}</th>
+              <th key={c} style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#c9a227", fontWeight: 700, borderBottom: "2px solid #1e2440", fontFamily: "'Cinzel', serif", minWidth: 130 }}>{c}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {BOSS_ORDER.map(bossName => {
-            const bossObj = BOSSES.find(b => b.name === bossName);
-            if (!bossObj) return null;
-            return bossObj.diffs.map(diff => {
-              const diffColor = DIFF_COLORS[diff] || "#94a3b8";
-              return (
-                <tr key={`${bossName}-${diff}`}>
-                  <td style={{ padding: "8px 16px", borderBottom: "1px solid #1e2440", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 1 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>{bossName}</span>
-                    {diff && <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "2px 6px", borderRadius: 4, background: `${diffColor}22`, color: diffColor }}>{DIFF_ABBR[diff] || diff}</span>}
+          {BOSS_ORDER.map(bossName => (
+            <tr key={bossName} style={{ borderBottom: "1px solid #1e2440" }}>
+              <td style={{ padding: "12px 16px", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 1 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{bossName}</span>
+              </td>
+              {chars.map(charName => {
+                const party = findParty(charName, bossName);
+                if (party) {
+                  const boss = party.bosses?.[0];
+                  const diff = boss?.difficulty || "";
+                  const diffColor = DIFF_COLORS[diff] || "#94a3b8";
+                  return (
+                    <td key={charName} style={{ padding: "8px 12px", textAlign: "center" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: `${diffColor}22`, color: diffColor }}>{diff || "—"}</span>
+                        <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>✓ {party.members?.length}/{party.maxMembers || 6}</span>
+                      </div>
+                    </td>
+                  );
+                }
+                return (
+                  <td key={charName} style={{ padding: "8px 12px", textAlign: "center" }}>
+                    <button
+                      onClick={() => onCreateParty(bossName, "", charName)}
+                      style={{
+                        padding: "5px 14px", borderRadius: 6, border: "1px dashed #1e2440",
+                        background: "transparent", color: "#475569", cursor: "pointer",
+                        fontSize: 11, fontFamily: "'Nunito', sans-serif", transition: "all 0.15s",
+                      }}
+                      onMouseEnter={e => { e.target.style.borderColor = "#c9a227"; e.target.style.color = "#c9a227"; }}
+                      onMouseLeave={e => { e.target.style.borderColor = "#1e2440"; e.target.style.color = "#475569"; }}
+                    >
+                      + Create
+                    </button>
                   </td>
-                  {chars.map(charName => {
-                    const party = findParty(charName, bossName);
-                    return (
-                      <td key={charName} style={{ padding: "6px 16px", borderBottom: "1px solid #1e2440", textAlign: "center" }}>
-                        {party ? (
-                          <div style={{ fontSize: 11, color: "#10b981", fontWeight: 600 }}>
-                            ✓ {party.members?.length || 0}p
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 11, color: "#374151" }}>—</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            });
-          })}
+                );
+              })}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -665,8 +605,8 @@ function LoginPage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg, #0b0e1a 0%, #111827 40%, #0b0e1a 100%)", fontFamily: "'Nunito', sans-serif" }}>
       <div style={{ textAlign: "center", padding: 40, background: "rgba(20,24,41,0.8)", border: "1px solid #1e2440", borderRadius: 20, backdropFilter: "blur(12px)", boxShadow: "0 24px 80px rgba(0,0,0,0.4)", animation: "slideUp 0.3s ease" }}>
-        <div style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 20px", background: "linear-gradient(135deg, #c9a227, #a3841e)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: "#fff", fontFamily: "'Cinzel', serif" }}>B</div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Cinzel', serif" }}>Boss Organizer</h1>
+        <img src="/logo.png" alt="Maple Scheduler" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Cinzel', serif" }}>Maple Scheduler</h1>
         <p style={{ fontSize: 14, color: "#64748b", marginBottom: 28, maxWidth: 300 }}>Organize your GMS bossing parties. Sign in with Discord to get started.</p>
         <a href="/auth/discord" style={{
           display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 28px", borderRadius: 10, textDecoration: "none",
@@ -687,6 +627,7 @@ export default function App() {
   const [user, setUser] = useState(undefined);
   const [parties, setParties] = useState({});
   const [showCreate, setShowCreate] = useState(false);
+  const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
   const [view, setView] = useState("schedule");
   const [loading, setLoading] = useState(true);
@@ -696,52 +637,40 @@ export default function App() {
       try {
         const data = await API.get("/api/me");
         setUser(data);
-        if (data) {
-          const p = await API.get("/api/parties");
-          setParties(p || {});
-        }
+        if (data) { const p = await API.get("/api/parties"); setParties(p || {}); }
       } catch { setUser(null); }
       setLoading(false);
     })();
   }, []);
 
-  // Auto-refresh every 8 seconds
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(async () => {
-      try {
-        const p = await API.get("/api/parties");
-        if (p) setParties(p);
-      } catch {}
+      try { const p = await API.get("/api/parties"); if (p) setParties(p); } catch {}
     }, 8000);
     return () => clearInterval(interval);
   }, [user]);
 
-  const saveParties = async (newParties) => {
-    setParties(newParties);
-    try { await API.put("/api/parties", newParties); } catch {}
-  };
+  const saveParties = async (np) => { setParties(np); try { await API.put("/api/parties", np); } catch {} };
 
   const handleCreateParty = async (party) => {
-    const newParties = { ...parties, [party.id]: party };
-    await saveParties(newParties);
+    await saveParties({ ...parties, [party.id]: party });
     setShowCreate(false);
+    setCreateDefaults({});
   };
 
   const handleDeleteParty = async (id) => {
-    const newParties = { ...parties };
-    delete newParties[id];
-    await saveParties(newParties);
+    const np = { ...parties }; delete np[id]; await saveParties(np);
   };
 
   const handleSaveProfile = async (settings) => {
-    try {
-      const updated = await API.patch("/api/me", settings);
-      setUser(prev => ({ ...prev, ...updated }));
-    } catch {
-      setUser(prev => ({ ...prev, ...settings }));
-    }
+    try { const u = await API.patch("/api/me", settings); setUser(prev => ({ ...prev, ...u })); } catch { setUser(prev => ({ ...prev, ...settings })); }
     setShowProfile(false);
+  };
+
+  const openCreateFromCharView = (bossName, diff, charName) => {
+    setCreateDefaults({ boss: bossName, diff, char: charName });
+    setShowCreate(true);
   };
 
   if (loading) {
@@ -763,17 +692,17 @@ export default function App() {
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", opacity: 0.03, backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 24px", borderBottom: "1px solid #1e2440", background: "rgba(11,14,26,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid #1e2440", background: "rgba(11,14,26,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #c9a227, #a3841e)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "#fff", fontFamily: "'Cinzel', serif" }}>B</div>
-          <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "'Cinzel', serif" }}>Boss Organizer</span>
+          <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
+          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "'Cinzel', serif", color: "#e2e8f0" }}>Maple Scheduler</span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setView("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>📅 Schedule</button>
           <button onClick={() => setView("characters")} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>👤 Characters</button>
-          <button style={S.btnPrimary} onClick={() => setShowCreate(true)}>＋ Create Party</button>
+          <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>
-            {user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} />}
+            {user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}
             ⚙️ {user.username}
           </button>
           <a href="/auth/logout" style={{ ...S.btnGhost, textDecoration: "none", fontSize: 12 }}>Logout</a>
@@ -785,8 +714,8 @@ export default function App() {
         {view === "schedule" ? (
           partyList.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>
-              <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>⚔️</div>
-              <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Nunito', sans-serif" }}>No parties yet</div>
+              <img src="/logo.png" alt="" style={{ width: 64, height: 64, opacity: 0.3, margin: "0 auto 12px", display: "block" }} />
+              <div style={{ fontSize: 15, fontWeight: 500 }}>No parties yet</div>
               <div style={{ fontSize: 13, marginTop: 6, color: "#374151" }}>Click "Create Party" to get started</div>
             </div>
           ) : (
@@ -795,11 +724,20 @@ export default function App() {
             </div>
           )
         ) : (
-          <CharactersView parties={parties} user={user} />
+          <CharactersView parties={parties} user={user} onCreateParty={openCreateFromCharView} />
         )}
       </div>
 
-      {showCreate && <CreatePartyModal onClose={() => setShowCreate(false)} onSave={handleCreateParty} currentUser={user} />}
+      {showCreate && (
+        <CreatePartyModal
+          onClose={() => { setShowCreate(false); setCreateDefaults({}); }}
+          onSave={handleCreateParty}
+          currentUser={user}
+          defaultBoss={createDefaults.boss}
+          defaultDiff={createDefaults.diff}
+          defaultChar={createDefaults.char}
+        />
+      )}
       {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} onSave={handleSaveProfile} />}
     </div>
   );
