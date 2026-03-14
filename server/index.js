@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import express from "express";
 import session from "express-session";
@@ -45,7 +46,42 @@ db.exec(`
 app.use(compression());
 app.use(express.json({ limit: "5mb" }));
 
+// SQLite session store — survives redeploys
+const sessionDb = new Database(process.env.NODE_ENV === "production" ? "/data/sessions.db" : join(__dirname, "..", "sessions.db"));
+sessionDb.pragma("journal_mode = WAL");
+sessionDb.exec(`CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, data TEXT, expires INTEGER)`);
+sessionDb.exec(`CREATE INDEX IF NOT EXISTS idx_expires ON sessions(expires)`);
+
+// Clean expired sessions every 15 min
+setInterval(() => { try { sessionDb.prepare("DELETE FROM sessions WHERE expires < ?").run(Date.now()); } catch {} }, 15 * 60 * 1000);
+
+class SQLiteStore extends session.Store {
+  get(sid, cb) {
+    try {
+      const row = sessionDb.prepare("SELECT data, expires FROM sessions WHERE sid = ?").get(sid);
+      if (!row || row.expires < Date.now()) { return cb(null, null); }
+      cb(null, JSON.parse(row.data));
+    } catch (e) { cb(e); }
+  }
+  set(sid, sess, cb) {
+    try {
+      const maxAge = sess.cookie?.maxAge || 30 * 24 * 60 * 60 * 1000;
+      const expires = Date.now() + maxAge;
+      sessionDb.prepare("INSERT OR REPLACE INTO sessions (sid, data, expires) VALUES (?, ?, ?)").run(sid, JSON.stringify(sess), expires);
+      cb?.(null);
+    } catch (e) { cb?.(e); }
+  }
+  destroy(sid, cb) {
+    try { sessionDb.prepare("DELETE FROM sessions WHERE sid = ?").run(sid); cb?.(null); } catch (e) { cb?.(e); }
+  }
+}
+
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 app.use(session({
+  store: new SQLiteStore(),
   secret: process.env.SESSION_SECRET || "change-me",
   resave: false,
   saveUninitialized: false,
@@ -56,10 +92,6 @@ app.use(session({
     sameSite: "lax",
   },
 }));
-
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
 
 /* ════════════════════════════════════════
    DISCORD OAUTH
