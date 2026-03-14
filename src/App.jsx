@@ -208,237 +208,143 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const [settingTime, setSettingTime] = useState(false);
   const [timeAnchor, setTimeAnchor] = useState(null);
   const [timeHover, setTimeHover] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const gridRef = useRef(null);
 
-  // Get all users in party
-  const memberUsers = useMemo(() => {
-    return party.members?.map(m => {
-      const u = allUsers.find(u => u.id === m.userId);
-      return { ...m, availability: u?.availability || {} };
-    }) || [];
-  }, [party.members, allUsers]);
+  const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: allUsers.find(u => u.id === m.userId)?.availability || {} })) || []), [party.members, allUsers]);
+  const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
 
-  // Other parties for each member
-  const otherParties = useMemo(() => {
-    const allP = Object.values(allParties || {});
-    const map = {};
-    party.members?.forEach(m => {
-      map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId));
-    });
-    return map;
-  }, [allParties, party]);
+  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const d = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); return d < 0 || d > 6 || s < 0 || s > 47 ? null : { day: d, slot: s }; };
+  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30 }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
+  const getCellInfo = (day, slot) => { let ac = 0; memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") ac++; }); let bc = 0; party.members?.forEach(m => { (otherParties[m.userId] || []).forEach(op => { if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); if (slot >= os && slot < os + 4) bc++; } }); }); return { ac, tot: memberUsers.length, bc }; };
+  const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); for (let i = Math.min(timeAnchor.slot, timeHover.slot); i <= Math.max(timeAnchor.slot, timeHover.slot); i++) s.add(`${timeAnchor.day}-${i}`); return s; };
+  const timePrev = settingTime ? getTimePrev() : new Set();
+  const partySlots = useMemo(() => { if (party.utcDay == null) return new Set(); const s = new Set(); const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); for (let i = ss; i < ss + 4 && i < 48; i++) s.add(`${party.utcDay}-${i}`); return s; }, [party.utcDay, party.utcHour, party.utcMin]);
 
-  const getSlot = (e) => {
-    if (!gridRef.current) return null;
-    const rect = gridRef.current.getBoundingClientRect();
-    const day = Math.floor((e.clientX - rect.left - 50) / ((rect.width - 50) / 7));
-    const slot = Math.floor((e.clientY - rect.top - 28) / ((rect.height - 28) / 48));
-    if (day < 0 || day > 6 || slot < 0 || slot > 47) return null;
-    return { day, slot };
-  };
-
-  const onGridClick = (e) => {
-    if (!settingTime) return;
-    const pos = getSlot(e);
-    if (!pos) return;
-    if (!timeAnchor) { setTimeAnchor(pos); }
-    else {
-      if (pos.day === timeAnchor.day) {
-        const startSlot = Math.min(timeAnchor.slot, pos.slot);
-        const h = Math.floor(startSlot / 2), m = (startSlot % 2) * 30;
-        onUpdate({ ...party, utcDay: pos.day, utcHour: h, utcMin: m });
-      }
-      setSettingTime(false); setTimeAnchor(null); setTimeHover(null);
-    }
-  };
-
-  // Availability cross-reference per cell
-  const getCellInfo = (day, slot) => {
-    let availCount = 0, totalMembers = memberUsers.length;
-    memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") availCount++; });
-    // Check other parties blocking this slot
-    let busyCount = 0;
-    party.members?.forEach(m => {
-      const others = otherParties[m.userId] || [];
-      others.forEach(op => {
-        if (op.utcDay === day) {
-          const opSlot = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0);
-          if (slot >= opSlot && slot < opSlot + 4) busyCount++; // ~2hr block
-        }
-      });
-    });
-    return { availCount, totalMembers, busyCount };
-  };
-
-  // Time preview
-  const getTimePreview = () => {
-    if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set();
-    const s = new Set();
-    for (let i = Math.min(timeAnchor.slot, timeHover.slot); i <= Math.max(timeAnchor.slot, timeHover.slot); i++) s.add(`${timeAnchor.day}-${i}`);
-    return s;
-  };
-  const timePrev = settingTime ? getTimePreview() : new Set();
-
-  // Current party's scheduled slots
-  const partySlots = useMemo(() => {
-    if (party.utcDay == null) return new Set();
-    const s = new Set();
-    const startSlot = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0);
-    for (let i = startSlot; i < startSlot + 4 && i < 48; i++) s.add(`${party.utcDay}-${i}`);
-    return s;
-  }, [party.utcDay, party.utcHour, party.utcMin]);
-
-  // Drop methods update
-  const updateDrop = (dropId, field, value) => {
-    const newDrops = (party.drops || []).map(d => d.id === dropId ? { ...d, [field]: value } : d);
-    onUpdate({ ...party, drops: newDrops });
-  };
-
-  const toggleEligible = (dropId, userId) => {
-    const drop = party.drops?.find(d => d.id === dropId);
-    if (!drop) return;
-    const elig = drop.eligible || [];
-    const newE = elig.includes(userId) ? elig.filter(x => x !== userId) : [...elig, userId];
-    updateDrop(dropId, "eligible", newE);
-  };
-
-  const setPriority = (dropId, userId, pos) => {
-    const drop = party.drops?.find(d => d.id === dropId);
-    if (!drop) return;
-    let prio = [...(drop.priority || [])];
-    prio = prio.filter(x => x !== userId);
-    if (pos > 0) prio.splice(pos - 1, 0, userId);
-    updateDrop(dropId, "priority", prio);
-  };
+  const updateDrop = (dropId, field, value) => { onUpdate({ ...party, drops: (party.drops || []).map(d => d.id === dropId ? { ...d, [field]: value } : d) }); };
+  const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId); if (!dr) return; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
+  const setPrioFn = (dropId, userId, pos) => { const dr = party.drops?.find(d => d.id === dropId); if (!dr) return; let p = [...(dr.priority || [])].filter(x => x !== userId); if (pos > 0) p.splice(pos - 1, 0, userId); updateDrop(dropId, "priority", p); };
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ ...BACKDROP, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button style={S.btnGhost} onClick={onBack}>← Back</button>
-          <span style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
-          <span style={{ fontSize: 12, color: "#64748b" }}>{party.members?.length}/{party.maxMembers || 6} members</span>
+    <div style={{ display: "flex", gap: 16, minHeight: "calc(100vh - 94px)", alignItems: "flex-start" }}>
+      {/* ── LEFT PANEL ── */}
+      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Boss info + controls */}
+        <div style={{ ...BACKDROP, padding: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <button style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 11 }} onClick={onBack}>←</button>
+            <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
+          </div>
+          {party.utcDay != null && <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</div>}
+          {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
+          {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button style={{ ...S.btnPrimary, fontSize: 11, padding: "5px 12px", background: settingTime ? "linear-gradient(135deg,#10b981,#059669)" : undefined }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "Cancel" : party.utcDay != null ? "Change Time" : "Set Time"}</button>
+            {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
+            {confirmDelete && <>
+              <button onClick={() => onDelete(party.id)} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.25)", color: "#f87171", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Confirm</button>
+              <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 8px" }}>No</button>
+            </>}
+          </div>}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {isLead && <button style={{ ...S.btnPrimary, background: settingTime ? "linear-gradient(135deg,#10b981,#059669)" : undefined }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "Cancel" : party.utcDay != null ? "Change Time" : "Set Perm Time"}</button>}
-          {isLead && <button onClick={() => onDelete(party.id)} style={{ ...S.btnGhost, color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
+
+        {/* Members — names only */}
+        <div style={{ ...BACKDROP, padding: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Members ({party.members?.length}/{party.maxMembers || 6})</div>
+          {party.members?.map((m, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: i < party.members.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{m.charName}</span>
+              {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 8 }}>TEMP</span>}
+              {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
+            </div>
+          ))}
         </div>
+
+        {/* Loot — compact with small PNGs */}
+        {drops.length > 0 && (
+          <div style={{ ...BACKDROP, padding: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Loot</div>
+            {drops.map((drop, di) => {
+              const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
+              const did = pd.id || `d${di}`;
+              return (
+                <div key={di} style={{ marginBottom: di < drops.length - 1 ? 12 : 0, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
+                    {isLead && <div style={{ display: "flex", gap: 3 }}>
+                      {["blink", "priority"].map(mt => (
+                        <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
+                          style={{ ...S.btnGhost, fontSize: 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
+                          {mt === "blink" ? "Blink" : "Prio"}
+                        </button>
+                      ))}
+                    </div>}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {party.members?.map((m, mi) => {
+                      const isE = pd.eligible?.includes(m.userId);
+                      const pp = pd.priority?.indexOf(m.userId);
+                      return (
+                        <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 6, background: "rgba(11,14,26,.3)", minWidth: 0 }}>
+                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "1.5px solid #10b981" } : pd.method === "blink" && !isE ? { opacity: 0.3 } : {}} />
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>{m.charName}</span>
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ width: 14, height: 14, borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.25)" : "rgba(255,255,255,.05)", color: isE ? "#10b981" : "#374151", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{isE ? "✓" : "—"}</button>}
+                          {pd.method === "priority" && <select value={pp >= 0 ? pp + 1 : ""} onChange={e => isLead && setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 9, padding: "1px 3px", width: 32, backgroundImage: "none" }} disabled={!isLead}><option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}</select>}
+                          {!pd.method && <span style={{ fontSize: 8, color: "#374151" }}>—</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {settingTime && <div style={{ ...BACKDROP, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600 }}>Click a start time on the grid below, then click the end time to set perm run.</div>}
-
-      {/* Schedule Grid — cross-referenced availability */}
-      <div style={{ ...BACKDROP, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0", marginBottom: 10 }}>Weekly Schedule</div>
-        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default" }}
+      {/* ── RIGHT PANEL — Schedule Grid ── */}
+      <div style={{ flex: 1, ...BACKDROP, padding: 12, minWidth: 0 }}>
+        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click start time, then end time to set perm run</div>}
+        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", height: "calc(100vh - 140px)", minHeight: 500 }}
           onClick={onGridClick} onMouseMove={e => settingTime && setTimeHover(getSlot(e))} onMouseLeave={() => setTimeHover(null)}>
-          <div style={{ display: "grid", gridTemplateColumns: "50px repeat(7, 1fr)" }}>
-            <div />
-            {DAYS_SHORT.map(d => <div key={d} style={{ textAlign: "center", padding: "6px 0", fontSize: 11, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{d}</div>)}
+          <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
+            {/* Header */}
+            <div style={{ height: 22 }} />
+            {DAYS_SHORT.map(d => <div key={d} style={{ height: 22, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "22px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{d}</div>)}
+            {/* Time rows */}
             {Array.from({ length: 24 }, (_, h) => {
               const slot = h * 2;
               return [
-                <div key={`l${h}`} style={{ fontSize: 9, color: "#475569", padding: "4px 4px 4px 0", textAlign: "right", fontFamily: "'Comfortaa',sans-serif", borderTop: "1px solid rgba(30,36,64,.2)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>,
-                ...Array.from({ length: 7 }, (_, dayIdx) => {
-                  const info = getCellInfo(dayIdx, slot);
-                  const isScheduled = partySlots.has(`${dayIdx}-${slot}`) || partySlots.has(`${dayIdx}-${slot + 1}`);
-                  const isPrev = timePrev.has(`${dayIdx}-${slot}`) || timePrev.has(`${dayIdx}-${slot + 1}`);
+                <div key={`l${h}`} style={{ fontSize: 8, color: "#475569", textAlign: "right", paddingRight: 4, fontFamily: "'Comfortaa',sans-serif", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid rgba(30,36,64,.15)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>,
+                ...Array.from({ length: 7 }, (_, di) => {
+                  const info = getCellInfo(di, slot);
+                  const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
+                  const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
                   let bg = "transparent";
-                  if (isScheduled) bg = "rgba(37,99,235,.25)";
-                  else if (isPrev) bg = "rgba(37,99,235,.12)";
-                  else if (info.busyCount > 0) bg = "rgba(251,191,36,.1)";
-                  else if (info.availCount === 0) bg = "rgba(239,68,68,.06)";
-                  else if (info.availCount === info.totalMembers) bg = "rgba(34,197,94,.12)";
-                  else if (info.availCount > 0) bg = "rgba(34,197,94,.06)";
-                  return <div key={`${h}-${dayIdx}`} style={{ minHeight: 24, borderTop: "1px solid rgba(30,36,64,.2)", borderLeft: "1px solid rgba(30,36,64,.1)", background: bg }} />;
+                  if (isSch) bg = "rgba(37,99,235,.25)";
+                  else if (isPr) bg = "rgba(37,99,235,.12)";
+                  else if (info.bc > 0) bg = "rgba(251,191,36,.1)";
+                  else if (info.ac === 0) bg = "rgba(239,68,68,.05)";
+                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.1)";
+                  else if (info.ac > 0) bg = "rgba(34,197,94,.05)";
+                  return <div key={`${h}-${di}`} style={{ borderTop: "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
                 }),
               ];
             }).flat()}
           </div>
-          <ResetLine top={28 + (RESET_SLOT / 48) * (24 * 24)} />
+          {/* Reset line */}
+          <div style={{ position: "absolute", left: 36, right: 0, top: 22 + (RESET_SLOT / 48) * (gridRef.current?.clientHeight - 22 || 500), height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
+            <span style={{ position: "absolute", right: 4, top: -12, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+          </div>
         </div>
         {/* Legend */}
-        <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(37,99,235,.25)", marginRight: 4, verticalAlign: "middle" }} />Scheduled</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.12)", marginRight: 4, verticalAlign: "middle" }} />All Available</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.06)", marginRight: 4, verticalAlign: "middle" }} />Unavailable</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,191,36,.1)", marginRight: 4, verticalAlign: "middle" }} />Conflict</span>
-        </div>
-        {party.utcDay != null && <div style={{ marginTop: 8, fontSize: 12, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Perm: {DAYS[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</div>}
-      </div>
-
-      {/* Members */}
-      <div style={{ ...BACKDROP, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0", marginBottom: 10 }}>Members</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {party.members?.map((m, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 10, background: "rgba(255,255,255,.03)", border: "1px solid rgba(30,36,64,.4)" }}>
-              <CharAvatar name={m.charName} size={32} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{m.charName}{m.isTemp && <span style={S.tempBadge}>TEMP</span>}</div>
-                {i === 0 && <span style={{ ...S.leadBadge, fontSize: 8 }}>LEAD</span>}
-              </div>
-            </div>
-          ))}
+        <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.25)", marginRight: 3, verticalAlign: "middle" }} />Sched</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.1)", marginRight: 3, verticalAlign: "middle" }} />Avail</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.05)", marginRight: 3, verticalAlign: "middle" }} />Busy</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.1)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
       </div>
-
-      {/* Loot Section */}
-      {drops.length > 0 && (
-        <div style={{ ...BACKDROP, padding: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0", marginBottom: 14 }}>Loot Distribution</div>
-          {drops.map((drop, di) => {
-            const partyDrop = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
-            const dropId = partyDrop.id || `d${di}`;
-            return (
-              <div key={di} style={{ marginBottom: 20, padding: 14, borderRadius: 10, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.4)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
-                  {isLead && <div style={{ display: "flex", gap: 6 }}>
-                    {["blink", "priority"].map(method => (
-                      <button key={method} onClick={() => updateDrop(dropId, "method", partyDrop.method === method ? null : method)}
-                        style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", ...(partyDrop.method === method ? S.btnActive : {}), textTransform: "capitalize" }}>
-                        {method === "blink" ? "Blink / Dist" : "Priority"}
-                      </button>
-                    ))}
-                  </div>}
-                </div>
-
-                {/* Member avatars with loot status */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                  {party.members?.map((m, mi) => {
-                    const isElig = partyDrop.eligible?.includes(m.userId);
-                    const prioPos = partyDrop.priority?.indexOf(m.userId);
-                    return (
-                      <div key={mi} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 64 }}>
-                        <CharAvatar name={m.charName} size={44} style={partyDrop.method === "blink" && isElig ? { border: `2px solid #10b981` } : partyDrop.method === "blink" && !isElig ? { border: "2px solid rgba(255,255,255,.1)", opacity: 0.4 } : {}} />
-                        <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.charName}</div>
-                        {partyDrop.method === "blink" && (
-                          <button onClick={() => isLead && toggleEligible(dropId, m.userId)} style={{
-                            padding: "2px 10px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default",
-                            background: isElig ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.05)", color: isElig ? "#10b981" : "#475569",
-                            fontSize: 10, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif",
-                          }}>{isElig ? "In" : "—"}</button>
-                        )}
-                        {partyDrop.method === "priority" && (
-                          <select value={prioPos >= 0 ? prioPos + 1 : ""} onChange={e => isLead && setPriority(dropId, m.userId, parseInt(e.target.value) || 0)}
-                            style={{ ...S.select, fontSize: 10, padding: "2px 6px", width: 50, textAlign: "center" }} disabled={!isLead}>
-                            <option value="">—</option>
-                            {party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
-                          </select>
-                        )}
-                        {!partyDrop.method && <div style={{ fontSize: 10, color: "#374151" }}>—</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -496,7 +402,7 @@ function ProfileModal({ user, onClose, onSave }) {
 }
 
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
-function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
+function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
   const partyList = Object.values(parties || {});
   const avail = user.availability || {};
   const [dragging, setDragging] = useState(null); // party being dragged
@@ -518,7 +424,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
   }, [partyList]);
 
   // Duration in 30-min slots
-  const getDurSlots = (p) => Math.max(1, Math.ceil((p.duration || 30) / 30));
+  const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
   const getStartSlot = (p) => p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
 
   // Get occupied slots per day (excluding a specific party id)
@@ -527,7 +433,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
     (byDay[day] || []).forEach(p => {
       if (p.id === excludeId) return;
       const start = getStartSlot(p);
-      const dur = getDurSlots(p);
+      const dur = Math.ceil(getDurSlots(p));
       for (let s = start; s < start + dur && s < SLOT_COUNT; s++) occ.add(s);
     });
     return occ;
@@ -536,8 +442,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
   // Magnetize: find nearest valid position that doesn't overlap
   const magnetize = useCallback((day, targetSlot, durSlots, excludeId) => {
     const occ = getOccupied(day, excludeId);
-    // Try target first
-    const fits = (s) => { for (let i = s; i < s + durSlots && i < SLOT_COUNT; i++) { if (occ.has(i)) return false; } return s >= 0 && s + durSlots <= SLOT_COUNT; };
+    const ceilDur = Math.ceil(durSlots);
+    const fits = (s) => { for (let i = s; i < s + ceilDur && i < SLOT_COUNT; i++) { if (occ.has(i)) return false; } return s >= 0 && s + ceilDur <= SLOT_COUNT; };
     if (fits(targetSlot)) return targetSlot;
     // Search outward
     for (let offset = 1; offset < SLOT_COUNT; offset++) {
@@ -749,10 +655,39 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
           </div>
         </div>
       )}
+
+      {/* Recently Deleted — recoverable */}
+      {Object.keys(trash || {}).length > 0 && (
+        <div style={{ ...BACKDROP, padding: 16, marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
+            Recently Deleted
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
+            {Object.values(trash).map(p => {
+              const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+              const preTime = p._preDeleteDay != null ? `${DAYS_SHORT[p._preDeleteDay]} @ ${String(p._preDeleteHour).padStart(2, "0")}:${String(p._preDeleteMin).padStart(2, "0")}` : "Unscheduled";
+              return (
+                <div key={p.id} style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,.03)", border: "1px dashed rgba(239,68,68,.2)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, opacity: 0.7 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#475569", marginTop: 3, fontFamily: "'Comfortaa',sans-serif" }}>Pre-deletion: {preTime}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => onRecover(p.id)} style={{ padding: "4px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
+                    <button onClick={() => onPermDelete(p.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 11, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 /* ═══ CHARACTERS VIEW ═══ */
 function CharactersView({ parties, user, onCreateParty, onClickParty }) {
   const pl = Object.values(parties || {}); const chars = user.characters || [];
@@ -805,6 +740,7 @@ export default function App() {
   const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
   const [selectedParty, setSelectedParty] = useState(null);
+  const [trash, setTrash] = useState({});
   const [view, setView] = useState("schedule");
   const [loading, setLoading] = useState(true);
 
@@ -817,7 +753,25 @@ export default function App() {
 
   const save = async np => { setParties(np); try { await API.put("/api/parties", np); } catch {} };
   const handleCreate = async p => { await save({ ...parties, [p.id]: p }); setShowCreate(false); setCreateDefaults({}); setSelectedParty(p); setView("party"); };
-  const handleDelete = async id => { const np = { ...parties }; delete np[id]; await save(np); if (selectedParty?.id === id) { setSelectedParty(null); setView("schedule"); } };
+  const handleDelete = async id => {
+    const p = parties[id];
+    if (p) {
+      // Save pre-deletion time info, move to trash
+      setTrash(prev => ({ ...prev, [id]: { ...p, _preDeleteDay: p.utcDay, _preDeleteHour: p.utcHour, _preDeleteMin: p.utcMin, _deletedAt: Date.now() } }));
+    }
+    const np = { ...parties }; delete np[id]; await save(np);
+    if (selectedParty?.id === id) { setSelectedParty(null); setView("schedule"); }
+  };
+  const handleRecover = async id => {
+    const p = trash[id];
+    if (!p) return;
+    // Recover with no scheduled time
+    const recovered = { ...p, utcDay: null, utcHour: null, utcMin: null };
+    delete recovered._deletedAt;
+    await save({ ...parties, [id]: recovered });
+    setTrash(prev => { const c = { ...prev }; delete c[id]; return c; });
+  };
+  const handlePermDelete = id => { setTrash(prev => { const c = { ...prev }; delete c[id]; return c; }); };
   const handleUpdateParty = async p => { await save({ ...parties, [p.id]: p }); setSelectedParty(p); };
   const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } setShowProfile(false); };
   const openParty = p => { setSelectedParty(p); setView("party"); };
@@ -846,7 +800,7 @@ export default function App() {
         ) : view === "characters" ? (
           <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} />
         ) : (
-          <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} />
+          <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} />
         )}
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
