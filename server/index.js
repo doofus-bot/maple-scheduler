@@ -14,7 +14,10 @@ const PORT = process.env.PORT || 3000;
 /* ════════════════════════════════════════
    DATABASE
    ════════════════════════════════════════ */
-const db = new Database(join(__dirname, "..", "data.db"));
+const dbPath = process.env.NODE_ENV === "production" 
+  ? "/data/data.db" 
+  : join(__dirname, "..", "data.db");
+const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
