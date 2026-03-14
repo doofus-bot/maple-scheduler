@@ -147,7 +147,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
     onSave({
       id: Date.now().toString(36), leaderId: currentUser.id, members, maxMembers: maxP,
       bosses: [{ id: "b0", bossName: boss, difficulty: diff }],
-      utcDay: null, utcHour: null, utcMin: null, notes: "",
+      utcDay: null, utcHour: null, utcMin: null, duration: 30, notes: "",
       drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })),
     });
   };
@@ -495,46 +495,260 @@ function ProfileModal({ user, onClose, onSave }) {
   );
 }
 
-/* ═══ SCHEDULE VIEW ═══ */
-function ScheduleView({ parties, user, onClickParty }) {
+/* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
+function ScheduleView({ parties, user, onClickParty, onUpdateParty }) {
   const partyList = Object.values(parties || {});
   const avail = user.availability || {};
-  const byDay = useMemo(() => { const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] }; partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); }); return m; }, [partyList]);
+  const [dragging, setDragging] = useState(null); // party being dragged
+  const [dragPos, setDragPos] = useState(null);   // { day, slot } under cursor
+  const [undoStack, setUndoStack] = useState([]);
+  const gridRef = useRef(null);
+
+  const HEADER_H = 44; // day header height
+  const ROW_H = 18;     // height per 15-min slot (48 half-hour slots shown as 96 quarter-hour for precision, but we use 48 slots of 30min)
+  const SLOT_COUNT = 48; // 30-min slots
+  const LABEL_W = 50;
+
+  const byDay = useMemo(() => {
+    const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
+    partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
+    // Sort scheduled by time
+    for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
+    return m;
+  }, [partyList]);
+
+  // Duration in 30-min slots
+  const getDurSlots = (p) => Math.max(1, Math.ceil((p.duration || 30) / 30));
+  const getStartSlot = (p) => p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
+
+  // Get occupied slots per day (excluding a specific party id)
+  const getOccupied = useCallback((day, excludeId) => {
+    const occ = new Set();
+    (byDay[day] || []).forEach(p => {
+      if (p.id === excludeId) return;
+      const start = getStartSlot(p);
+      const dur = getDurSlots(p);
+      for (let s = start; s < start + dur && s < SLOT_COUNT; s++) occ.add(s);
+    });
+    return occ;
+  }, [byDay]);
+
+  // Magnetize: find nearest valid position that doesn't overlap
+  const magnetize = useCallback((day, targetSlot, durSlots, excludeId) => {
+    const occ = getOccupied(day, excludeId);
+    // Try target first
+    const fits = (s) => { for (let i = s; i < s + durSlots && i < SLOT_COUNT; i++) { if (occ.has(i)) return false; } return s >= 0 && s + durSlots <= SLOT_COUNT; };
+    if (fits(targetSlot)) return targetSlot;
+    // Search outward
+    for (let offset = 1; offset < SLOT_COUNT; offset++) {
+      if (fits(targetSlot - offset)) return targetSlot - offset;
+      if (fits(targetSlot + offset)) return targetSlot + offset;
+    }
+    return null; // no space
+  }, [getOccupied]);
+
+  // Grid slot from mouse event
+  const getGridSlot = (e) => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const day = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
+    const slot = Math.floor((y - HEADER_H) / ((rect.height - HEADER_H) / SLOT_COUNT));
+    if (day < 0 || day > 6 || slot < 0 || slot >= SLOT_COUNT) return null;
+    return { day, slot };
+  };
+
+  // Drag handlers
+  const onDragStart = (p) => (e) => {
+    setDragging(p);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", p.id);
+  };
+
+  const onGridDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const pos = getGridSlot(e);
+    setDragPos(pos);
+  };
+
+  const onGridDrop = (e) => {
+    e.preventDefault();
+    if (!dragging || !dragPos) { setDragging(null); setDragPos(null); return; }
+    const durSlots = getDurSlots(dragging);
+    const snapped = magnetize(dragPos.day, dragPos.slot, durSlots, dragging.id);
+    if (snapped != null) {
+      const h = Math.floor(snapped / 2);
+      const m = (snapped % 2) * 30;
+      // Save undo
+      setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
+      onUpdateParty({ ...dragging, utcDay: dragPos.day, utcHour: h, utcMin: m });
+    }
+    setDragging(null);
+    setDragPos(null);
+  };
+
+  const onGridDragLeave = () => setDragPos(null);
+
+  const undo = () => {
+    if (undoStack.length === 0) return;
+    const last = undoStack[undoStack.length - 1];
+    const p = partyList.find(x => x.id === last.id);
+    if (p) onUpdateParty({ ...p, utcDay: last.utcDay, utcHour: last.utcHour, utcMin: last.utcMin });
+    setUndoStack(prev => prev.slice(0, -1));
+  };
+
+  // Duration change for unscheduled
+  const changeDuration = (p, delta) => {
+    const cur = p.duration || 30;
+    const next = Math.max(15, Math.min(120, cur + delta));
+    onUpdateParty({ ...p, duration: next });
+  };
+
+  // Compute preview for drag
+  const dragPreview = useMemo(() => {
+    if (!dragging || !dragPos) return null;
+    const durSlots = getDurSlots(dragging);
+    const snapped = magnetize(dragPos.day, dragPos.slot, durSlots, dragging.id);
+    if (snapped == null) return null;
+    const h = Math.floor(snapped / 2);
+    const m = (snapped % 2) * 30;
+    return { day: dragPos.day, startSlot: snapped, durSlots, timeStr: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+  }, [dragging, dragPos, magnetize]);
+
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
+  const gridH = SLOT_COUNT * ROW_H;
 
   return (
     <div>
-      <div style={{ ...BACKDROP, padding: 16, marginBottom: 16, position: "relative" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "50px repeat(7,1fr)", gap: 0 }}>
-          <div />{DAYS_SHORT.map((d, i) => <div key={d} style={{ textAlign: "center", padding: "8px 4px", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>{d}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 2 }}>{byDay[i]?.length || 0} boss{byDay[i]?.length !== 1 ? "es" : ""}</div></div>)}
-          {Array.from({ length: 24 }, (_, h) => { const slot = h * 2; return [
-            <div key={`t${h}`} style={{ fontSize: 10, color: "#475569", padding: "6px 4px 6px 0", textAlign: "right", fontFamily: "'Comfortaa',sans-serif", borderTop: "1px solid rgba(30,36,64,.3)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>,
-            ...Array.from({ length: 7 }, (_, di) => {
-              const noAvail = !isAvail(di, slot) && !isAvail(di, slot + 1) && !isAvail(di, slot + 2) && !isAvail(di, slot + 3);
-              const ps = byDay[di]?.filter(p => p.utcHour != null && Math.floor(p.utcHour / 2) === Math.floor(h / 2));
-              return <div key={`${h}-${di}`} style={{ minHeight: 36, padding: "2px 3px", borderTop: "1px solid rgba(30,36,64,.3)", borderLeft: "1px solid rgba(30,36,64,.15)", background: noAvail ? "rgba(239,68,68,.04)" : "transparent" }}>
-                {ps?.map(p => { const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-                  return solo ? <div key={p.id} onClick={() => onClickParty(p)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer", background: SOLO_BG, border: `1px solid ${SOLO_BORDER}`, color: SOLO_COLOR, fontFamily: "'Comfortaa',sans-serif", marginBottom: 2 }}>Solo — {b?.bossName}</div>
-                  : <div key={p.id} onClick={() => onClickParty(p)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", background: `${dc}18`, border: `1px solid ${dc}33`, color: dc, fontFamily: "'Comfortaa',sans-serif", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b?.bossName} · {p.members?.length}p</div>;
-                })}</div>;
-            }),
-          ]; }).flat()}
+      {/* Undo bar */}
+      {undoStack.length > 0 && (
+        <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 12, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{undoStack.length} action{undoStack.length > 1 ? "s" : ""}</span>
+          <button onClick={undo} style={{ ...S.btnGhost, fontSize: 12, padding: "4px 14px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>
         </div>
-        {/* Reset line */}
-        <div style={{ position: "absolute", left: 66, right: 16, top: 16 + 44 + (RESET_SLOT / 48) * (24 * 36), height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
-          <span style={{ position: "absolute", right: 0, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+      )}
+
+      {/* Grid */}
+      <div style={{ ...BACKDROP, padding: 16, marginBottom: 16, position: "relative" }}>
+        <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
+          onDragOver={onGridDragOver} onDrop={onGridDrop} onDragLeave={onGridDragLeave}>
+          {/* Day headers */}
+          <div style={{ display: "flex", height: HEADER_H }}>
+            <div style={{ width: LABEL_W, flexShrink: 0 }} />
+            {DAYS_SHORT.map((d, i) => (
+              <div key={d} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
+                {d}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[i]?.length || 0} boss{byDay[i]?.length !== 1 ? "es" : ""}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Time grid */}
+          <div style={{ display: "flex", height: gridH }}>
+            {/* Time labels */}
+            <div style={{ width: LABEL_W, flexShrink: 0, position: "relative" }}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={h} style={{ position: "absolute", top: h * 2 * ROW_H, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                  {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {Array.from({ length: 7 }, (_, dayIdx) => (
+              <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(30,36,64,.15)" }}>
+                {/* Background slots — availability tint */}
+                {Array.from({ length: SLOT_COUNT }, (_, si) => {
+                  const noA = !isAvail(dayIdx, si);
+                  return <div key={si} style={{
+                    position: "absolute", top: si * ROW_H, left: 0, right: 0, height: ROW_H,
+                    background: noA ? "rgba(239,68,68,.04)" : "transparent",
+                    borderBottom: si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
+                  }} />;
+                })}
+
+                {/* Scheduled party blocks */}
+                {(byDay[dayIdx] || []).map(p => {
+                  const startS = getStartSlot(p);
+                  const durS = getDurSlots(p);
+                  const b = p.bosses?.[0];
+                  const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+                  const solo = p.members?.length === 1;
+                  return (
+                    <div key={p.id} onClick={() => onClickParty(p)} style={{
+                      position: "absolute", top: startS * ROW_H + 1, left: 2, right: 2,
+                      height: durS * ROW_H - 2, borderRadius: 5, cursor: "pointer", zIndex: 3,
+                      padding: "3px 6px", overflow: "hidden",
+                      background: solo ? SOLO_BG : `${dc}22`,
+                      border: `1px solid ${solo ? SOLO_BORDER : dc + "44"}`,
+                      fontSize: 10, fontWeight: 700, color: solo ? SOLO_COLOR : dc,
+                      fontFamily: "'Comfortaa',sans-serif",
+                    }}>
+                      {solo ? "Solo" : b?.bossName}
+                      {!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}
+                    </div>
+                  );
+                })}
+
+                {/* Drag preview */}
+                {dragPreview && dragPreview.day === dayIdx && (
+                  <div style={{
+                    position: "absolute", top: dragPreview.startSlot * ROW_H, left: 2, right: 2,
+                    height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10,
+                    background: "rgba(37,99,235,.15)", border: `2px dashed ${ACCENT}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
+                    pointerEvents: "none",
+                  }}>
+                    {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Reset line */}
+          <div style={{ position: "absolute", left: LABEL_W, right: 0, top: HEADER_H + RESET_SLOT * ROW_H, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
+            <span style={{ position: "absolute", right: 4, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+          </div>
         </div>
       </div>
-      {byDay.unscheduled.length > 0 && <div style={{ ...BACKDROP, padding: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>Unscheduled</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
-          {byDay.unscheduled.map(p => { const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-            return <div key={p.id} onClick={() => onClickParty(p)} style={{ padding: "10px 14px", borderRadius: 10, cursor: "pointer", background: solo ? SOLO_BG : `${dc}12`, border: `1px solid ${solo ? SOLO_BORDER : dc + "30"}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div><span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span><span style={{ fontSize: 10, fontWeight: 700, marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span></div>
-              {solo ? <span style={{ fontSize: 11, fontWeight: 700, color: SOLO_COLOR }}>Solo</span> : <span style={{ fontSize: 11, color: "#64748b" }}>{p.members?.length}/{p.maxMembers || 6}</span>}
-            </div>; })}
+
+      {/* Unscheduled — draggable */}
+      {byDay.unscheduled.length > 0 && (
+        <div style={{ ...BACKDROP, padding: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
+            Unscheduled — drag into the schedule above
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
+            {byDay.unscheduled.map(p => {
+              const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+              const dur = p.duration || 30;
+              return (
+                <div key={p.id} draggable onDragStart={onDragStart(p)} style={{
+                  padding: "10px 14px", borderRadius: 10, cursor: "grab",
+                  background: solo ? SOLO_BG : `${dc}12`, border: `1px solid ${solo ? SOLO_BORDER : dc + "30"}`,
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                  userSelect: "none",
+                }}>
+                  <div onClick={() => onClickParty(p)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                    {solo && <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, color: SOLO_COLOR }}>Solo</span>}
+                  </div>
+                  {/* Duration control */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => changeDuration(p, -15)} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 40, textAlign: "center" }}>{dur}m</span>
+                    <button onClick={() => changeDuration(p, 15)} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>}
+      )}
     </div>
   );
 }
@@ -632,7 +846,7 @@ export default function App() {
         ) : view === "characters" ? (
           <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} />
         ) : (
-          <ScheduleView parties={parties} user={user} onClickParty={openParty} />
+          <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} />
         )}
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
