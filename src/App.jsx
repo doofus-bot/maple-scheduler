@@ -95,7 +95,7 @@ const API = {
    STYLES
    ════════════════════════════════════════════════════════════ */
 const globalCSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Nunito:wght@400;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Philosopher:wght@400;700&display=swap');
   @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
   @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.5 } }
@@ -112,17 +112,17 @@ const S = {
   overlay: { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn 0.15s ease" },
   modal: { background: "linear-gradient(160deg, #141829 0%, #0b0e1a 100%)", border: "1px solid #1e2440", borderRadius: 16, width: "min(540px, 92vw)", maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.5)", animation: "slideUp 0.2s ease" },
   modalHead: { padding: "16px 22px", borderBottom: "1px solid #1e2440", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  modalTitle: { fontSize: 17, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" },
+  modalTitle: { fontSize: 17, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka', sans-serif" },
   modalBody: { padding: "18px 22px" },
   closeBtn: { width: 30, height: 30, borderRadius: 8, border: "none", cursor: "pointer", background: "rgba(255,255,255,0.06)", color: "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 },
-  label: { fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'Nunito', sans-serif" },
-  input: { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(11,14,26,0.6)", color: "#e2e8f0", fontSize: 14, outline: "none", fontFamily: "'Nunito', sans-serif" },
-  select: { padding: "10px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(11,14,26,0.6)", color: "#e2e8f0", fontSize: 14, outline: "none", cursor: "pointer", fontFamily: "'Nunito', sans-serif", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 },
-  btnPrimary: { padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #c9a227, #a3841e)", color: "#fff", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6, fontFamily: "'Nunito', sans-serif", boxShadow: "0 2px 12px rgba(201,162,39,0.3)" },
-  btnGhost: { padding: "8px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(255,255,255,0.04)", color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'Nunito', sans-serif" },
+  label: { fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'Philosopher', sans-serif" },
+  input: { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(11,14,26,0.6)", color: "#e2e8f0", fontSize: 14, outline: "none", fontFamily: "'Philosopher', sans-serif" },
+  select: { padding: "10px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(11,14,26,0.6)", color: "#e2e8f0", fontSize: 14, outline: "none", cursor: "pointer", fontFamily: "'Philosopher', sans-serif", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 },
+  btnPrimary: { padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #c9a227, #a3841e)", color: "#fff", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6, fontFamily: "'Philosopher', sans-serif", boxShadow: "0 2px 12px rgba(201,162,39,0.3)" },
+  btnGhost: { padding: "8px 14px", borderRadius: 8, border: "1px solid #1e2440", background: "rgba(255,255,255,0.04)", color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'Philosopher', sans-serif" },
   btnActive: { background: "rgba(201,162,39,0.12)", color: "#c9a227", borderColor: "rgba(201,162,39,0.3)" },
-  btnGreen: { padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontWeight: 600, fontSize: 13, fontFamily: "'Nunito', sans-serif" },
-  addTempBtn: { padding: "8px 16px", borderRadius: 8, border: "1px dashed rgba(251,191,36,0.4)", background: "rgba(251,191,36,0.06)", color: "#fbbf24", cursor: "pointer", fontWeight: 600, fontSize: 12, marginTop: 10, fontFamily: "'Nunito', sans-serif", display: "flex", alignItems: "center", gap: 6 },
+  btnGreen: { padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontWeight: 600, fontSize: 13, fontFamily: "'Philosopher', sans-serif" },
+  addTempBtn: { padding: "8px 16px", borderRadius: 8, border: "1px dashed rgba(251,191,36,0.4)", background: "rgba(251,191,36,0.06)", color: "#fbbf24", cursor: "pointer", fontWeight: 600, fontSize: 12, marginTop: 10, fontFamily: "'Philosopher', sans-serif", display: "flex", alignItems: "center", gap: 6 },
   card: { background: "#141829", border: "1px solid #1e2440", borderRadius: 14, overflow: "hidden", transition: "transform 0.2s, box-shadow 0.2s" },
   tempBadge: { fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.15)", color: "#fbbf24", marginLeft: 4 },
   tbdBadge: { fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(239,68,68,0.12)", color: "#f87171", marginLeft: 4 },
@@ -143,11 +143,11 @@ function IGNPopup({ title, hint, onConfirm, onClose }) {
     <div style={S.popOverlay} onClick={() => onClose("TBD")}>
       <div style={S.popBox} onClick={e => e.stopPropagation()}>
         <div style={S.popHead}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{title}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka', sans-serif" }}>{title}</span>
           <button style={S.closeBtn} onClick={() => onClose("TBD")}>✕</button>
         </div>
         <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10, fontFamily: "'Nunito', sans-serif" }}>{hint}</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10, fontFamily: "'Philosopher', sans-serif" }}>{hint}</div>
           <input ref={ref} style={S.input} placeholder="e.g. xXSlayerXx" value={ign} onChange={e => setIgn(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") onConfirm(ign.trim() || "TBD"); if (e.key === "Escape") onClose("TBD"); }} />
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
@@ -246,7 +246,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
           </div>
 
           {boss && diff && (
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, fontFamily: "'Nunito', sans-serif" }}>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, fontFamily: "'Philosopher', sans-serif" }}>
               Max party size: <span style={{ color: "#c9a227", fontWeight: 700 }}>{maxParty}</span>
             </div>
           )}
@@ -305,7 +305,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
               <label style={S.label}>Drops for {boss} ({diff})</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                 {drops.map((d, i) => (
-                  <span key={i} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontFamily: "'Nunito', sans-serif", background: "rgba(201,162,39,0.1)", border: "1px solid rgba(201,162,39,0.2)", color: "#c9a227" }}>{d.name}</span>
+                  <span key={i} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontFamily: "'Philosopher', sans-serif", background: "rgba(201,162,39,0.1)", border: "1px solid rgba(201,162,39,0.2)", color: "#c9a227" }}>{d.name}</span>
                 ))}
               </div>
             </div>
@@ -446,27 +446,27 @@ function ProfileModal({ user, onClose, onSave }) {
             {chars.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {chars.map((c, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 13, color: "#c9a227", background: "rgba(201,162,39,0.08)", border: "1px solid rgba(201,162,39,0.2)", fontFamily: "'Nunito', sans-serif" }}>
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 13, color: "#c9a227", background: "rgba(201,162,39,0.08)", border: "1px solid rgba(201,162,39,0.2)", fontFamily: "'Philosopher', sans-serif" }}>
                     {c}
                     <button onClick={() => removeChar(i)} style={{ width: 16, height: 16, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,0.2)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✕</button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "#475569", fontFamily: "'Nunito', sans-serif" }}>No characters added yet.</div>
+              <div style={{ fontSize: 13, color: "#475569", fontFamily: "'Philosopher', sans-serif" }}>No characters added yet.</div>
             )}
           </div>
 
           <label style={S.label}>Availability (click start time, then click end time to mark available — click a green slot to clear it — Esc to cancel)</label>
-          {anchor && <div style={{ fontSize: 12, color: "#10b981", marginBottom: 6, fontFamily: "'Nunito', sans-serif", fontWeight: 600 }}>
+          {anchor && <div style={{ fontSize: 12, color: "#10b981", marginBottom: 6, fontFamily: "'Philosopher', sans-serif", fontWeight: 600 }}>
             ✦ Selecting on {DAYS_SHORT[anchor.day]} — click end time to confirm
           </div>}
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontFamily: "'Nunito', sans-serif" }}>Red dashed line = 0:00 UTC (GMS Daily Reset)</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontFamily: "'Philosopher', sans-serif" }}>Red dashed line = 0:00 UTC (GMS Daily Reset)</div>
           <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,0.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "hidden", height: 420 }}
             onClick={onClick} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
             <div style={{ display: "flex", height: 24 }}>
               <div style={{ width: 40, flexShrink: 0 }} />
-              {DAYS_SHORT.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Nunito', sans-serif" }}>{d}</div>)}
+              {DAYS_SHORT.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Philosopher', sans-serif" }}>{d}</div>)}
             </div>
             <div style={{ display: "flex", height: 396 }}>
               <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
@@ -500,7 +500,7 @@ function ProfileModal({ user, onClose, onSave }) {
               ))}
             </div>
             <div style={{ position: "absolute", left: 40, right: 0, top: 24 + (resetSlotNorm / 48) * 396, height: 0, borderTop: "2px dashed rgba(239,68,68,0.6)", pointerEvents: "none" }}>
-              <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,0.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Nunito', sans-serif" }}>0:00 UTC — GMS Reset</span>
+              <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,0.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Philosopher', sans-serif" }}>0:00 UTC — GMS Reset</span>
             </div>
           </div>
 
@@ -531,7 +531,7 @@ function PartyCard({ party, onDelete, currentUser }) {
     <div style={{ ...S.card, borderLeft: `3px solid ${diffColor}`, ...(hover ? { transform: "translateY(-2px)", boxShadow: `0 8px 32px ${diffColor}22` } : {}) }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1e2440" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{boss?.bossName || "Unknown"}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka', sans-serif" }}>{boss?.bossName || "Unknown"}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty || "?"}</span>
           {isLead && <button onClick={() => onDelete(party.id)} style={{ width: 24, height: 24, borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,0.12)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑</button>}
@@ -544,7 +544,7 @@ function PartyCard({ party, onDelete, currentUser }) {
               {m.isTemp ? "T" : (m.charName?.[0] || "?").toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Nunito', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Philosopher', sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                 {m.charName || m.userId}
                 {m.isTemp && <span style={S.tempBadge}>TEMP</span>}
                 {!m.isTemp && m.charName === "TBD" && <span style={S.tbdBadge}>IGN TBD</span>}
@@ -556,20 +556,20 @@ function PartyCard({ party, onDelete, currentUser }) {
         {drops.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
             {drops.map((d, i) => (
-              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(201,162,39,0.08)", color: "#c9a227", border: "1px solid rgba(201,162,39,0.15)", fontFamily: "'Nunito', sans-serif" }}>{d.name}</span>
+              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(201,162,39,0.08)", color: "#c9a227", border: "1px solid rgba(201,162,39,0.15)", fontFamily: "'Philosopher', sans-serif" }}>{d.name}</span>
             ))}
           </div>
         )}
         {party.utcDay != null ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,39,0.06)", fontSize: 12, color: "#94a3b8", fontFamily: "'Nunito', sans-serif" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,39,0.06)", fontSize: 12, color: "#94a3b8", fontFamily: "'Philosopher', sans-serif" }}>
             <span>🕐</span><span>{DAYS[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</span>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", fontSize: 12, color: "#475569", fontFamily: "'Nunito', sans-serif" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", fontSize: 12, color: "#475569", fontFamily: "'Philosopher', sans-serif" }}>
             <span>🕐</span><span>Unscheduled</span>
           </div>
         )}
-        <div style={{ fontSize: 11, color: "#475569", marginTop: 6, fontFamily: "'Nunito', sans-serif" }}>{party.members?.length || 0}/{party.maxMembers || 6} members</div>
+        <div style={{ fontSize: 11, color: "#475569", marginTop: 6, fontFamily: "'Philosopher', sans-serif" }}>{party.members?.length || 0}/{party.maxMembers || 6} members</div>
       </div>
     </div>
   );
@@ -586,8 +586,8 @@ function CharactersView({ parties, user, onCreateParty }) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>
         <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>👤</div>
-        <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Nunito', sans-serif" }}>No characters registered</div>
-        <div style={{ fontSize: 13, marginTop: 6, color: "#374151", fontFamily: "'Nunito', sans-serif" }}>Go to ⚙️ Profile Settings and add your character IGNs first</div>
+        <div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Philosopher', sans-serif" }}>No characters registered</div>
+        <div style={{ fontSize: 13, marginTop: 6, color: "#374151", fontFamily: "'Philosopher', sans-serif" }}>Go to ⚙️ Profile Settings and add your character IGNs first</div>
       </div>
     );
   }
@@ -602,12 +602,12 @@ function CharactersView({ parties, user, onCreateParty }) {
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Nunito', sans-serif" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Philosopher', sans-serif" }}>
         <thead>
           <tr>
             <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid #1e2440", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 2, minWidth: 140 }}>Boss</th>
             {chars.map(c => (
-              <th key={c} style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#c9a227", fontWeight: 700, borderBottom: "2px solid #1e2440", fontFamily: "'Cinzel', serif", minWidth: 130 }}>{c}</th>
+              <th key={c} style={{ padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#c9a227", fontWeight: 700, borderBottom: "2px solid #1e2440", fontFamily: "'Fredoka', sans-serif", minWidth: 130 }}>{c}</th>
             ))}
           </tr>
         </thead>
@@ -615,7 +615,7 @@ function CharactersView({ parties, user, onCreateParty }) {
           {BOSS_ORDER.map(bossName => (
             <tr key={bossName} style={{ borderBottom: "1px solid #1e2440" }}>
               <td style={{ padding: "12px 16px", position: "sticky", left: 0, background: "#0b0e1a", zIndex: 1 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Cinzel', serif" }}>{bossName}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka', sans-serif" }}>{bossName}</span>
               </td>
               {chars.map(charName => {
                 const party = findParty(charName, bossName);
@@ -639,7 +639,7 @@ function CharactersView({ parties, user, onCreateParty }) {
                       style={{
                         padding: "5px 14px", borderRadius: 6, border: "1px dashed #1e2440",
                         background: "transparent", color: "#475569", cursor: "pointer",
-                        fontSize: 11, fontFamily: "'Nunito', sans-serif", transition: "all 0.15s",
+                        fontSize: 11, fontFamily: "'Philosopher', sans-serif", transition: "all 0.15s",
                       }}
                       onMouseEnter={e => { e.target.style.borderColor = "#c9a227"; e.target.style.color = "#c9a227"; }}
                       onMouseLeave={e => { e.target.style.borderColor = "#1e2440"; e.target.style.color = "#475569"; }}
@@ -662,10 +662,10 @@ function CharactersView({ parties, user, onCreateParty }) {
    ════════════════════════════════════════════════════════════ */
 function LoginPage() {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg, #0b0e1a 0%, #111827 40%, #0b0e1a 100%)", fontFamily: "'Nunito', sans-serif" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", fontFamily: "'Philosopher', sans-serif" }}>
       <div style={{ textAlign: "center", padding: 40, background: "rgba(20,24,41,0.8)", border: "1px solid #1e2440", borderRadius: 20, backdropFilter: "blur(12px)", boxShadow: "0 24px 80px rgba(0,0,0,0.4)", animation: "slideUp 0.3s ease" }}>
         <img src="/logo.png" alt="Maple Scheduler" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Cinzel', serif" }}>Maple Scheduler</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Fredoka', sans-serif" }}>Maple Scheduler</h1>
         <p style={{ fontSize: 14, color: "#64748b", marginBottom: 28, maxWidth: 300 }}>Organize your GMS bossing parties. Sign in with Discord to get started.</p>
         <a href="/auth/discord" style={{
           display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 28px", borderRadius: 10, textDecoration: "none",
@@ -734,7 +734,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a", color: "#64748b", fontFamily: "'Nunito', sans-serif" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#64748b", fontFamily: "'Philosopher', sans-serif" }}>
         <style>{globalCSS}</style>
         <div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div>
       </div>
@@ -746,7 +746,7 @@ export default function App() {
   const partyList = Object.values(parties);
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(145deg, #0b0e1a 0%, #111827 40%, #0b0e1a 100%)", color: "#e2e8f0", fontFamily: "'Nunito', sans-serif", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Philosopher', sans-serif", position: "relative" }}>
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", opacity: 0.03, backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
 
@@ -754,7 +754,7 @@ export default function App() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid #1e2440", background: "rgba(11,14,26,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/logo.png" alt="Logo" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
-          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "'Cinzel', serif", color: "#e2e8f0" }}>Maple Scheduler</span>
+          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "'Fredoka', sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setView("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>📅 Schedule</button>
