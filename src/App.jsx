@@ -208,6 +208,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const [settingTime, setSettingTime] = useState(false);
   const [timeAnchor, setTimeAnchor] = useState(null);
   const [timeHover, setTimeHover] = useState(null);
+  const [hoverTime, setHoverTime] = useState(null); // { day, slot } for tooltip
   const [confirmDelete, setConfirmDelete] = useState(false);
   const gridRef = useRef(null);
 
@@ -215,7 +216,9 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
 
   const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const d = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); return d < 0 || d > 6 || s < 0 || s > 47 ? null : { day: d, slot: s }; };
+  const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30 }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
+  const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); };
   const getCellInfo = (day, slot) => { let ac = 0; memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") ac++; }); let bc = 0; party.members?.forEach(m => { (otherParties[m.userId] || []).forEach(op => { if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); if (slot >= os && slot < os + 4) bc++; } }); }); return { ac, tot: memberUsers.length, bc }; };
   const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); for (let i = Math.min(timeAnchor.slot, timeHover.slot); i <= Math.max(timeAnchor.slot, timeHover.slot); i++) s.add(`${timeAnchor.day}-${i}`); return s; };
   const timePrev = settingTime ? getTimePrev() : new Set();
@@ -239,7 +242,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           {party.utcDay != null && <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</div>}
           {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
           {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button style={{ ...S.btnPrimary, fontSize: 11, padding: "5px 12px", background: settingTime ? "linear-gradient(135deg,#10b981,#059669)" : undefined }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "Cancel" : party.utcDay != null ? "Change Time" : "Set Time"}</button>
+            <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", color: "#fff", background: settingTime ? "linear-gradient(135deg,#f59e0b,#d97706)" : "linear-gradient(135deg,#10b981,#059669)" }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "Cancel" : party.utcDay != null ? "Change Time" : "Set Time"}</button>
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
               <button onClick={() => onDelete(party.id)} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.25)", color: "#f87171", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Confirm</button>
@@ -284,12 +287,19 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                     {party.members?.map((m, mi) => {
                       const isE = pd.eligible?.includes(m.userId);
                       const pp = pd.priority?.indexOf(m.userId);
+                      const hasPrio = pp != null && pp >= 0;
                       return (
                         <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 6, background: "rgba(11,14,26,.3)", minWidth: 0 }}>
-                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "1.5px solid #10b981" } : pd.method === "blink" && !isE ? { opacity: 0.3 } : {}} />
+                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "1.5px solid #10b981" } : pd.method === "blink" && !isE ? { opacity: 0.3 } : pd.method === "priority" && hasPrio ? { border: "1.5px solid " + ACCENT } : pd.method === "priority" && !hasPrio ? { opacity: 0.3 } : {}} />
                           <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>{m.charName}</span>
                           {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ width: 14, height: 14, borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.25)" : "rgba(255,255,255,.05)", color: isE ? "#10b981" : "#374151", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{isE ? "✓" : "—"}</button>}
-                          {pd.method === "priority" && <select value={pp >= 0 ? pp + 1 : ""} onChange={e => isLead && setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 9, padding: "1px 3px", width: 32, backgroundImage: "none" }} disabled={!isLead}><option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}</select>}
+                          {pd.method === "priority" && (isLead ? (
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 9, padding: "1px 4px", width: 36, backgroundImage: "none", textAlign: "center", color: hasPrio ? ACCENT : "#475569" }}>
+                              <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>#{pi + 1}</option>)}
+                            </select>
+                          ) : (
+                            <span style={{ fontSize: 9, fontWeight: 700, color: hasPrio ? ACCENT : "#374151", fontFamily: "'Comfortaa',sans-serif", minWidth: 16, textAlign: "center" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                          ))}
                           {!pd.method && <span style={{ fontSize: 8, color: "#374151" }}>—</span>}
                         </div>
                       );
@@ -304,9 +314,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
 
       {/* ── RIGHT PANEL — Schedule Grid ── */}
       <div style={{ flex: 1, ...BACKDROP, padding: 12, minWidth: 0 }}>
-        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click start time, then end time to set perm run</div>}
+        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click start time, then end time{timeAnchor ? ` — started at ${slotToTime(timeAnchor.slot)} on ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
+        {/* Hover time tooltip */}
+        {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", height: "calc(100vh - 140px)", minHeight: 500 }}
-          onClick={onGridClick} onMouseMove={e => settingTime && setTimeHover(getSlot(e))} onMouseLeave={() => setTimeHover(null)}>
+          onClick={onGridClick} onMouseMove={onGridMove} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); }}>
           <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
             {/* Header */}
             <div style={{ height: 22 }} />
@@ -320,9 +332,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   const info = getCellInfo(di, slot);
                   const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
                   const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
+                  const isHov = settingTime && hoverTime && hoverTime.day === di && (hoverTime.slot === slot || hoverTime.slot === slot + 1);
                   let bg = "transparent";
                   if (isSch) bg = "rgba(37,99,235,.25)";
                   else if (isPr) bg = "rgba(37,99,235,.12)";
+                  else if (isHov) bg = "rgba(37,99,235,.08)";
                   else if (info.bc > 0) bg = "rgba(251,191,36,.1)";
                   else if (info.ac === 0) bg = "rgba(239,68,68,.05)";
                   else if (info.ac === info.tot) bg = "rgba(34,197,94,.1)";
@@ -543,8 +557,10 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
         )}
       </div>
 
+      {/* Main content — grid left, unscheduled right */}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
       {/* Grid */}
-      <div style={{ ...BACKDROP, padding: 16, marginBottom: 16, position: "relative" }}>
+      <div style={{ ...BACKDROP, padding: 16, position: "relative", flex: 1, minWidth: 0 }}>
         <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
           {/* Day headers */}
@@ -630,6 +646,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
         </div>
       </div>
 
+      {/* Right column — Unscheduled + Deleted */}
+      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
       {/* Unscheduled section — also serves as unschedule drop zone in edit mode */}
       <div style={{ ...BACKDROP, padding: 16, marginTop: editing || byDay.unscheduled.length > 0 ? 0 : undefined, display: editing || byDay.unscheduled.length > 0 ? undefined : "none",
         ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
@@ -646,7 +664,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           {editing ? "Unscheduled — drag to schedule, or drop here to unschedule" : "Unscheduled"}
         </div>
         {byDay.unscheduled.length > 0 ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {byDay.unscheduled.map(p => {
               const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
               const dur = p.duration || 30;
@@ -683,7 +701,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
             Recently Deleted
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {Object.values(trash).map(p => {
               const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
               const preTime = p._preDeleteDay != null ? `${DAYS_SHORT[p._preDeleteDay]} @ ${String(p._preDeleteHour).padStart(2, "0")}:${String(p._preDeleteMin).padStart(2, "0")}` : "Unscheduled";
@@ -706,6 +724,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           </div>
         </div>
       )}
+      </div>{/* close right column */}
+      </div>{/* close flex container */}
     </div>
   );
 }
