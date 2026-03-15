@@ -242,7 +242,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           {party.utcDay != null && <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</div>}
           {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
           {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", color: "#fff", background: settingTime ? "linear-gradient(135deg,#f59e0b,#d97706)" : "linear-gradient(135deg,#10b981,#059669)" }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "Cancel" : party.utcDay != null ? "Change Time" : "Set Time"}</button>
+            <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
+            {party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
               <button onClick={() => onDelete(party.id)} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.25)", color: "#f87171", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Confirm</button>
@@ -341,7 +342,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   else if (info.ac === 0) bg = "rgba(239,68,68,.05)";
                   else if (info.ac === info.tot) bg = "rgba(34,197,94,.1)";
                   else if (info.ac > 0) bg = "rgba(34,197,94,.05)";
-                  return <div key={`${h}-${di}`} style={{ borderTop: "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
+                  const is4hr = h > 0 && h % 4 === 0;
+                  return <div key={`${h}-${di}`} style={{ borderTop: is4hr ? "1px solid rgba(255,255,255,.12)" : "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
                 }),
               ];
             }).flat()}
@@ -542,28 +544,86 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const gridH = SLOT_COUNT * ROW_H;
 
   return (
-    <div>
-      {/* Toolbar */}
-      <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
-            style={{ ...S.btnGhost, fontSize: 12, padding: "5px 14px", ...(editing ? { background: "rgba(37,99,235,.15)", color: ACCENT, borderColor: ACCENT_BORDER } : {}) }}>
-            {editing ? "✓ Done" : "✎ Edit"}
-          </button>
-          {editing && <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Drag parties to reschedule</span>}
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+      {/* ── LEFT COLUMN — Edit + Unscheduled + Deleted ── */}
+      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Edit controls */}
+        <div style={{ ...BACKDROP, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editing ? 8 : 0 }}>
+            <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
+              style={{ fontSize: 12, padding: "5px 14px", borderRadius: 8, border: `1px solid ${editing ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: editing ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: editing ? ACCENT : "#94a3b8" }}>
+              {editing ? "✓ Done" : "✎ Edit Schedule"}
+            </button>
+            {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 11, padding: "4px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
+          </div>
+          {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Drag parties to reschedule</div>}
         </div>
-        {undoStack.length > 0 && (
-          <button onClick={undo} style={{ ...S.btnGhost, fontSize: 12, padding: "4px 14px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>
+
+        {/* Unscheduled — drop zone in edit mode */}
+        <div style={{ ...BACKDROP, padding: 12, ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
+          onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
+          onDrop={editing ? (e) => { e.preventDefault(); if (dragging && dragging.utcDay != null) { setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]); onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null }); } setDragging(null); setDragPos(null); } : undefined}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Unscheduled</div>
+          {byDay.unscheduled.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {byDay.unscheduled.map(p => {
+                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1; const dur = p.duration || 30;
+                return (
+                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? SOLO_BG : `${dc}10`, border: `1px solid ${solo ? SOLO_BORDER : dc + "25"}`, userSelect: "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                      <div onClick={() => !editing && onClickParty(p)} style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                        {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: SOLO_COLOR }}>Solo</span>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                        <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 30, textAlign: "center" }}>{dur}m</span>
+                        <button onClick={() => changeDuration(p, 15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : editing ? (
+            <div style={{ padding: "16px 0", textAlign: "center", fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop here to unschedule</div>
+          ) : (
+            <div style={{ fontSize: 11, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>None</div>
+          )}
+        </div>
+
+        {/* Recently Deleted */}
+        {Object.keys(trash || {}).length > 0 && (
+          <div style={{ ...BACKDROP, padding: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Recently Deleted</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {Object.values(trash).map(p => {
+                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+                const preTime = p._preDeleteDay != null ? `${DAYS_SHORT[p._preDeleteDay]} ${String(p._preDeleteHour).padStart(2, "0")}:${String(p._preDeleteMin).padStart(2, "0")}` : "—";
+                return (
+                  <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.02)", border: "1px dashed rgba(239,68,68,.15)", opacity: 0.7 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                    </div>
+                    <div style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Was: {preTime}</div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => onRecover(p.id)} style={{ padding: "3px 10px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
+                      <button onClick={() => onPermDelete(p.id)} style={{ padding: "3px 8px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 10, fontFamily: "'Comfortaa',sans-serif" }}>✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Main content — grid left, unscheduled right */}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-      {/* Grid */}
+      {/* ── RIGHT — Schedule Grid ── */}
       <div style={{ ...BACKDROP, padding: 16, position: "relative", flex: 1, minWidth: 0 }}>
         <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
-          {/* Day headers */}
           <div style={{ display: "flex", height: HEADER_H }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
             {DAYS_SHORT.map((d, i) => (
@@ -572,10 +632,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               </div>
             ))}
           </div>
-
-          {/* Time grid */}
           <div style={{ display: "flex", height: gridH }}>
-            {/* Time labels */}
             <div style={{ width: LABEL_W, flexShrink: 0, position: "relative" }}>
               {Array.from({ length: 24 }, (_, h) => (
                 <div key={h} style={{ position: "absolute", top: h * 2 * ROW_H, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
@@ -583,149 +640,47 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 </div>
               ))}
             </div>
-
-            {/* Day columns */}
             {Array.from({ length: 7 }, (_, dayIdx) => (
               <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(30,36,64,.15)" }}>
-                {/* Background slots — availability tint */}
                 {Array.from({ length: SLOT_COUNT }, (_, si) => {
                   const noA = !isAvail(dayIdx, si);
+                  const is4hr = si % 8 === 0 && si > 0;
                   return <div key={si} style={{
                     position: "absolute", top: si * ROW_H, left: 0, right: 0, height: ROW_H,
                     background: noA ? "rgba(239,68,68,.04)" : "transparent",
-                    borderBottom: si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
+                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.12)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
                   }} />;
                 })}
-
-                {/* Scheduled party blocks */}
                 {(byDay[dayIdx] || []).map(p => {
-                  const startS = getStartSlot(p);
-                  const durS = getDurSlots(p);
-                  const b = p.bosses?.[0];
-                  const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
-                  const solo = p.members?.length === 1;
+                  const startS = getStartSlot(p); const durS = getDurSlots(p);
+                  const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)} style={{
                       position: "absolute", top: startS * ROW_H + 1, left: 2, right: 2,
                       height: durS * ROW_H - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
                       padding: "3px 6px", overflow: "hidden",
-                      background: solo ? SOLO_BG : `${dc}22`,
-                      border: `1px solid ${solo ? SOLO_BORDER : dc + "44"}`,
-                      fontSize: 10, fontWeight: 700, color: solo ? SOLO_COLOR : dc,
-                      fontFamily: "'Comfortaa',sans-serif",
+                      background: solo ? SOLO_BG : `${dc}22`, border: `1px solid ${solo ? SOLO_BORDER : dc + "44"}`,
+                      fontSize: 10, fontWeight: 700, color: solo ? SOLO_COLOR : dc, fontFamily: "'Comfortaa',sans-serif",
                       ...(editing ? { outline: `1px dashed ${dc}66` } : {}),
                     }}>
-                      {solo ? "Solo" : b?.bossName}
-                      {!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}
+                      {solo ? "Solo" : b?.bossName}{!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}
                     </div>
                   );
                 })}
-
-                {/* Drag preview */}
                 {editing && dragPreview && dragPreview.day === dayIdx && (
-                  <div style={{
-                    position: "absolute", top: dragPreview.startSlot * ROW_H, left: 2, right: 2,
-                    height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10,
-                    background: "rgba(37,99,235,.15)", border: `2px dashed ${ACCENT}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
-                    pointerEvents: "none",
-                  }}>
+                  <div style={{ position: "absolute", top: dragPreview.startSlot * ROW_H, left: 2, right: 2, height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10, background: "rgba(37,99,235,.15)", border: `2px dashed ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
                     {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
                   </div>
                 )}
               </div>
             ))}
           </div>
-
-          {/* Reset line */}
           <div style={{ position: "absolute", left: LABEL_W, right: 0, top: HEADER_H + RESET_SLOT * ROW_H, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
             <span style={{ position: "absolute", right: 4, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
           </div>
         </div>
       </div>
-
-      {/* Right column — Unscheduled + Deleted */}
-      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* Unscheduled section — also serves as unschedule drop zone in edit mode */}
-      <div style={{ ...BACKDROP, padding: 16, marginTop: editing || byDay.unscheduled.length > 0 ? 0 : undefined, display: editing || byDay.unscheduled.length > 0 ? undefined : "none",
-        ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
-        onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
-        onDrop={editing ? (e) => {
-          e.preventDefault();
-          if (dragging && dragging.utcDay != null) {
-            setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
-            onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null });
-          }
-          setDragging(null); setDragPos(null);
-        } : undefined}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
-          {editing ? "Unscheduled — drag to schedule, or drop here to unschedule" : "Unscheduled"}
-        </div>
-        {byDay.unscheduled.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {byDay.unscheduled.map(p => {
-              const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-              const dur = p.duration || 30;
-              return (
-                <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{
-                  padding: "10px 14px", borderRadius: 10, cursor: editing ? "grab" : "pointer",
-                  background: solo ? SOLO_BG : `${dc}12`, border: `1px solid ${solo ? SOLO_BORDER : dc + "30"}`,
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-                  userSelect: "none",
-                }}>
-                  <div onClick={() => !editing && onClickParty(p)} style={{ cursor: editing ? "grab" : "pointer", flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
-                    {solo && <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, color: SOLO_COLOR }}>Solo</span>}
-                  </div>
-                  {/* Duration control — always visible for unscheduled */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => changeDuration(p, -15)} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-                    <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 40, textAlign: "center" }}>{dur}m</span>
-                    <button onClick={() => changeDuration(p, 15)} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : editing ? (
-          <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop a scheduled party here to unschedule it</div>
-        ) : null}
-      </div>
-
-      {/* Recently Deleted — recoverable */}
-      {Object.keys(trash || {}).length > 0 && (
-        <div style={{ ...BACKDROP, padding: 16, marginTop: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
-            Recently Deleted
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {Object.values(trash).map(p => {
-              const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
-              const preTime = p._preDeleteDay != null ? `${DAYS_SHORT[p._preDeleteDay]} @ ${String(p._preDeleteHour).padStart(2, "0")}:${String(p._preDeleteMin).padStart(2, "0")}` : "Unscheduled";
-              return (
-                <div key={p.id} style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,.03)", border: "1px dashed rgba(239,68,68,.2)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, opacity: 0.7 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
-                    </div>
-                    <div style={{ fontSize: 10, color: "#475569", marginTop: 3, fontFamily: "'Comfortaa',sans-serif" }}>Pre-deletion: {preTime}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => onRecover(p.id)} style={{ padding: "4px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
-                    <button onClick={() => onPermDelete(p.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 11, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>✕</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      </div>{/* close right column */}
-      </div>{/* close flex container */}
     </div>
   );
 }
