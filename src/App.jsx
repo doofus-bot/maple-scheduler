@@ -217,12 +217,12 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
 
   const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const d = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); return d < 0 || d > 6 || s < 0 || s > 47 ? null : { day: d, slot: s }; };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30 }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
+  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); };
-  const getCellInfo = (day, slot) => { let ac = 0; memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") ac++; }); let bc = 0; party.members?.forEach(m => { (otherParties[m.userId] || []).forEach(op => { if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); if (slot >= os && slot < os + 4) bc++; } }); }); return { ac, tot: memberUsers.length, bc }; };
-  const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); for (let i = Math.min(timeAnchor.slot, timeHover.slot); i <= Math.max(timeAnchor.slot, timeHover.slot); i++) s.add(`${timeAnchor.day}-${i}`); return s; };
+  const getCellInfo = (day, slot) => { let ac = 0; memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") ac++; }); let bc = 0; party.members?.forEach(m => { (otherParties[m.userId] || []).forEach(op => { if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) bc++; } }); }); return { ac, tot: memberUsers.length, bc }; };
+  const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); const mn = Math.min(timeAnchor.slot, timeHover.slot); const mx = Math.max(timeAnchor.slot, timeHover.slot); const capped = Math.min(mx, mn + 3); for (let i = mn; i <= capped; i++) s.add(`${timeAnchor.day}-${i}`); return s; };
   const timePrev = settingTime ? getTimePrev() : new Set();
-  const partySlots = useMemo(() => { if (party.utcDay == null) return new Set(); const s = new Set(); const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); for (let i = ss; i < ss + 4 && i < 48; i++) s.add(`${party.utcDay}-${i}`); return s; }, [party.utcDay, party.utcHour, party.utcMin]);
+  const partySlots = useMemo(() => { if (party.utcDay == null) return new Set(); const s = new Set(); const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); for (let i = ss; i < ss + dur && i < 48; i++) s.add(`${party.utcDay}-${i}`); return s; }, [party.utcDay, party.utcHour, party.utcMin, party.duration]);
 
   const updateDrop = (dropId, field, value) => { onUpdate({ ...party, drops: (party.drops || []).map(d => d.id === dropId ? { ...d, [field]: value } : d) }); };
   const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId); if (!dr) return; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
@@ -239,7 +239,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
             <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
             <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
           </div>
-          {party.utcDay != null && <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} @ {String(party.utcHour).padStart(2, "0")}:{String(party.utcMin).padStart(2, "0")}</div>}
+          {party.utcDay != null && (() => { const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); const es = Math.min(ss + dur, 48); return <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} {slotToTime(ss)} – {slotToTime(es)}</div>; })()}
           {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
           {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
@@ -443,6 +443,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
   const getStartSlot = (p) => p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
+  const fmtSlot = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+  const fmtRange = (p) => { const ss = getStartSlot(p); const es = ss + Math.ceil(getDurSlots(p)); return `${fmtSlot(ss)}–${fmtSlot(Math.min(es, 48))}`; };
 
   // Get occupied slots per day (excluding a specific party id)
   const getOccupied = useCallback((day, excludeId) => {
@@ -654,17 +656,22 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 {(byDay[dayIdx] || []).map(p => {
                   const startS = getStartSlot(p); const durS = getDurSlots(p);
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                  const timeRange = fmtRange(p);
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)} style={{
                       position: "absolute", top: startS * ROW_H + 1, left: 2, right: 2,
                       height: durS * ROW_H - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "3px 6px", overflow: "hidden",
-                      background: solo ? SOLO_BG : `${dc}22`, border: `1px solid ${solo ? SOLO_BORDER : dc + "44"}`,
-                      fontSize: 10, fontWeight: 700, color: solo ? SOLO_COLOR : dc, fontFamily: "'Comfortaa',sans-serif",
+                      padding: "2px 5px", overflow: "hidden",
+                      background: solo ? SOLO_BG : `${dc}22`,
+                      border: `1.5px solid rgba(255,255,255,.45)`,
+                      boxShadow: "0 0 4px rgba(255,255,255,.1)",
+                      fontSize: 9, fontWeight: 700, color: solo ? SOLO_COLOR : dc, fontFamily: "'Comfortaa',sans-serif",
+                      display: "flex", flexDirection: "column", justifyContent: "center",
                       ...(editing ? { outline: `1px dashed ${dc}66` } : {}),
                     }}>
-                      {solo ? "Solo" : b?.bossName}{!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}
+                      <div>{solo ? "Solo" : b?.bossName}{!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}</div>
+                      <div style={{ fontSize: 8, opacity: .7, fontWeight: 500 }}>{timeRange}</div>
                     </div>
                   );
                 })}
