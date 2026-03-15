@@ -405,8 +405,9 @@ function ProfileModal({ user, onClose, onSave }) {
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
   const partyList = Object.values(parties || {});
   const avail = user.availability || {};
-  const [dragging, setDragging] = useState(null); // party being dragged
-  const [dragPos, setDragPos] = useState(null);   // { day, slot } under cursor
+  const [editing, setEditing] = useState(false);
+  const [dragging, setDragging] = useState(null);
+  const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const gridRef = useRef(null);
 
@@ -528,18 +529,24 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
   return (
     <div>
-      {/* Undo bar */}
-      {undoStack.length > 0 && (
-        <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 12, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{undoStack.length} action{undoStack.length > 1 ? "s" : ""}</span>
-          <button onClick={undo} style={{ ...S.btnGhost, fontSize: 12, padding: "4px 14px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>
+      {/* Toolbar */}
+      <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
+            style={{ ...S.btnGhost, fontSize: 12, padding: "5px 14px", ...(editing ? { background: "rgba(37,99,235,.15)", color: ACCENT, borderColor: ACCENT_BORDER } : {}) }}>
+            {editing ? "✓ Done" : "✎ Edit"}
+          </button>
+          {editing && <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Drag parties to reschedule</span>}
         </div>
-      )}
+        {undoStack.length > 0 && (
+          <button onClick={undo} style={{ ...S.btnGhost, fontSize: 12, padding: "4px 14px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>
+        )}
+      </div>
 
       {/* Grid */}
       <div style={{ ...BACKDROP, padding: 16, marginBottom: 16, position: "relative" }}>
         <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
-          onDragOver={onGridDragOver} onDrop={onGridDrop} onDragLeave={onGridDragLeave}>
+          onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
           {/* Day headers */}
           <div style={{ display: "flex", height: HEADER_H }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
@@ -582,14 +589,16 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
                   const solo = p.members?.length === 1;
                   return (
-                    <div key={p.id} onClick={() => onClickParty(p)} style={{
+                    <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
+                      onClick={() => !editing && onClickParty(p)} style={{
                       position: "absolute", top: startS * ROW_H + 1, left: 2, right: 2,
-                      height: durS * ROW_H - 2, borderRadius: 5, cursor: "pointer", zIndex: 3,
+                      height: durS * ROW_H - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
                       padding: "3px 6px", overflow: "hidden",
                       background: solo ? SOLO_BG : `${dc}22`,
                       border: `1px solid ${solo ? SOLO_BORDER : dc + "44"}`,
                       fontSize: 10, fontWeight: 700, color: solo ? SOLO_COLOR : dc,
                       fontFamily: "'Comfortaa',sans-serif",
+                      ...(editing ? { outline: `1px dashed ${dc}66` } : {}),
                     }}>
                       {solo ? "Solo" : b?.bossName}
                       {!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}
@@ -598,7 +607,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 })}
 
                 {/* Drag preview */}
-                {dragPreview && dragPreview.day === dayIdx && (
+                {editing && dragPreview && dragPreview.day === dayIdx && (
                   <div style={{
                     position: "absolute", top: dragPreview.startSlot * ROW_H, left: 2, right: 2,
                     height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10,
@@ -621,29 +630,39 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
         </div>
       </div>
 
-      {/* Unscheduled — draggable */}
-      {byDay.unscheduled.length > 0 && (
-        <div style={{ ...BACKDROP, padding: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
-            Unscheduled — drag into the schedule above
-          </div>
+      {/* Unscheduled section — also serves as unschedule drop zone in edit mode */}
+      <div style={{ ...BACKDROP, padding: 16, marginTop: editing || byDay.unscheduled.length > 0 ? 0 : undefined, display: editing || byDay.unscheduled.length > 0 ? undefined : "none",
+        ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
+        onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
+        onDrop={editing ? (e) => {
+          e.preventDefault();
+          if (dragging && dragging.utcDay != null) {
+            setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
+            onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null });
+          }
+          setDragging(null); setDragPos(null);
+        } : undefined}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 10, fontFamily: "'Fredoka',sans-serif" }}>
+          {editing ? "Unscheduled — drag to schedule, or drop here to unschedule" : "Unscheduled"}
+        </div>
+        {byDay.unscheduled.length > 0 ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
             {byDay.unscheduled.map(p => {
               const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
               const dur = p.duration || 30;
               return (
-                <div key={p.id} draggable onDragStart={onDragStart(p)} style={{
-                  padding: "10px 14px", borderRadius: 10, cursor: "grab",
+                <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{
+                  padding: "10px 14px", borderRadius: 10, cursor: editing ? "grab" : "pointer",
                   background: solo ? SOLO_BG : `${dc}12`, border: `1px solid ${solo ? SOLO_BORDER : dc + "30"}`,
                   display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
                   userSelect: "none",
                 }}>
-                  <div onClick={() => onClickParty(p)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}>
+                  <div onClick={() => !editing && onClickParty(p)} style={{ cursor: editing ? "grab" : "pointer", flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
                     <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
                     {solo && <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, color: SOLO_COLOR }}>Solo</span>}
                   </div>
-                  {/* Duration control */}
+                  {/* Duration control — always visible for unscheduled */}
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <button onClick={() => changeDuration(p, -15)} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
                     <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 40, textAlign: "center" }}>{dur}m</span>
@@ -653,8 +672,10 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               );
             })}
           </div>
-        </div>
-      )}
+        ) : editing ? (
+          <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop a scheduled party here to unschedule it</div>
+        ) : null}
+      </div>
 
       {/* Recently Deleted — recoverable */}
       {Object.keys(trash || {}).length > 0 && (
