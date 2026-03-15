@@ -335,15 +335,15 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
                   const isHov = settingTime && hoverTime && hoverTime.day === di && (hoverTime.slot === slot || hoverTime.slot === slot + 1);
                   let bg = "transparent";
-                  if (isSch) bg = "rgba(37,99,235,.25)";
-                  else if (isPr) bg = "rgba(37,99,235,.12)";
-                  else if (isHov) bg = "rgba(37,99,235,.08)";
-                  else if (info.bc > 0) bg = "rgba(251,191,36,.1)";
-                  else if (info.ac === 0) bg = "rgba(239,68,68,.05)";
-                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.1)";
-                  else if (info.ac > 0) bg = "rgba(34,197,94,.05)";
+                  if (isSch) bg = "rgba(37,99,235,.45)";
+                  else if (isPr) bg = "rgba(37,99,235,.3)";
+                  else if (isHov) bg = "rgba(37,99,235,.18)";
+                  else if (info.bc > 0) bg = "rgba(251,191,36,.2)";
+                  else if (info.ac === 0) bg = "rgba(239,68,68,.18)";
+                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.25)";
+                  else if (info.ac > 0) bg = "rgba(34,197,94,.12)";
                   const is4hr = h > 0 && h % 4 === 0;
-                  return <div key={`${h}-${di}`} style={{ borderTop: is4hr ? "1px solid rgba(255,255,255,.12)" : "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
+                  return <div key={`${h}-${di}`} style={{ borderTop: is4hr ? "1px solid rgba(255,255,255,.15)" : "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
                 }),
               ];
             }).flat()}
@@ -355,10 +355,10 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
         </div>
         {/* Legend */}
         <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.25)", marginRight: 3, verticalAlign: "middle" }} />Sched</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.1)", marginRight: 3, verticalAlign: "middle" }} />Avail</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.05)", marginRight: 3, verticalAlign: "middle" }} />Busy</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.1)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.45)", marginRight: 3, verticalAlign: "middle" }} />Sched</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.25)", marginRight: 3, verticalAlign: "middle" }} />Avail</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.18)", marginRight: 3, verticalAlign: "middle" }} />Busy</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.2)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
       </div>
     </div>
@@ -427,18 +427,29 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const [undoStack, setUndoStack] = useState([]);
   const gridRef = useRef(null);
 
-  const HEADER_H = 44; // day header height
-  const ROW_H = 18;     // height per 15-min slot (48 half-hour slots shown as 96 quarter-hour for precision, but we use 48 slots of 30min)
-  const SLOT_COUNT = 48; // 30-min slots
+  const HEADER_H = 44;
+  const ROW_H = 18;
+  const SLOT_COUNT = 48;
   const LABEL_W = 50;
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
     partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
-    // Sort scheduled by time
     for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
     return m;
   }, [partyList]);
+
+  // Smart visible range — condensed to relevant hours, full in edit mode
+  const visRange = useMemo(() => {
+    if (editing) return { start: 0, end: 48 };
+    let rawMin = RESET_SLOT - 12, rawMax = RESET_SLOT + 12;
+    for (let d = 0; d < 7; d++) for (let s = 0; s < 48; s++) { if (avail[`${d}-${s}`] === "available") { rawMin = Math.min(rawMin, s); rawMax = Math.max(rawMax, s + 1); } }
+    partyList.forEach(p => { if (p.utcDay != null) { const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((p.duration || 30) / 30)); rawMin = Math.min(rawMin, ss); rawMax = Math.max(rawMax, ss + dur); } });
+    return { start: Math.max(0, rawMin - 1), end: Math.min(48, rawMax + 1) };
+  }, [editing, avail, partyList]);
+
+  const visSlots = visRange.end - visRange.start;
+  const gridH = visSlots * ROW_H;
 
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
@@ -479,8 +490,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const day = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
-    const slot = Math.floor((y - HEADER_H) / ((rect.height - HEADER_H) / SLOT_COUNT));
-    if (day < 0 || day > 6 || slot < 0 || slot >= SLOT_COUNT) return null;
+    const slot = visRange.start + Math.floor((y - HEADER_H) / ((rect.height - HEADER_H) / visSlots));
+    if (day < 0 || day > 6 || slot < visRange.start || slot >= visRange.end) return null;
     return { day, slot };
   };
 
@@ -543,7 +554,6 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   }, [dragging, dragPos, magnetize]);
 
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
-  const gridH = SLOT_COUNT * ROW_H;
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -636,56 +646,67 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           </div>
           <div style={{ display: "flex", height: gridH }}>
             <div style={{ width: LABEL_W, flexShrink: 0, position: "relative" }}>
-              {Array.from({ length: 24 }, (_, h) => (
-                <div key={h} style={{ position: "absolute", top: h * 2 * ROW_H, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+              {Array.from({ length: visSlots }, (_, vi) => {
+                const si = visRange.start + vi;
+                const h = Math.floor(si / 2);
+                if (si % 2 !== 0) return null;
+                return <div key={vi} style={{ position: "absolute", top: vi * ROW_H, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
                   {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
-                </div>
-              ))}
+                </div>;
+              })}
             </div>
             {Array.from({ length: 7 }, (_, dayIdx) => (
               <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(30,36,64,.15)" }}>
-                {Array.from({ length: SLOT_COUNT }, (_, si) => {
-                  const noA = !isAvail(dayIdx, si);
+                {Array.from({ length: visSlots }, (_, vi) => {
+                  const si = visRange.start + vi;
+                  const hasA = isAvail(dayIdx, si);
                   const is4hr = si % 8 === 0 && si > 0;
-                  return <div key={si} style={{
-                    position: "absolute", top: si * ROW_H, left: 0, right: 0, height: ROW_H,
-                    background: noA ? "rgba(239,68,68,.04)" : "transparent",
-                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.12)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
+                  return <div key={vi} style={{
+                    position: "absolute", top: vi * ROW_H, left: 0, right: 0, height: ROW_H,
+                    background: hasA ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.08)",
+                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.15)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
                   }} />;
                 })}
                 {(byDay[dayIdx] || []).map(p => {
                   const startS = getStartSlot(p); const durS = getDurSlots(p);
+                  if (startS + durS <= visRange.start || startS >= visRange.end) return null;
+                  const visTop = (startS - visRange.start) * ROW_H;
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
                   const timeRange = fmtRange(p);
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)} style={{
-                      position: "absolute", top: startS * ROW_H + 1, left: 2, right: 2,
+                      position: "absolute", top: visTop + 1, left: 2, right: 2,
                       height: durS * ROW_H - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
                       padding: "2px 5px", overflow: "hidden",
-                      background: solo ? SOLO_BG : `${dc}22`,
-                      border: `1.5px solid rgba(255,255,255,.45)`,
-                      boxShadow: "0 0 4px rgba(255,255,255,.1)",
+                      background: solo ? SOLO_BG : `${dc}30`,
+                      border: "1.5px solid rgba(255,255,255,.5)",
+                      boxShadow: "0 0 6px rgba(255,255,255,.15)",
                       fontSize: 9, fontWeight: 700, color: solo ? SOLO_COLOR : dc, fontFamily: "'Comfortaa',sans-serif",
                       display: "flex", flexDirection: "column", justifyContent: "center",
-                      ...(editing ? { outline: `1px dashed ${dc}66` } : {}),
+                      ...(editing ? { outline: `1px dashed ${dc}88` } : {}),
                     }}>
                       <div>{solo ? "Solo" : b?.bossName}{!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}</div>
-                      <div style={{ fontSize: 8, opacity: .7, fontWeight: 500 }}>{timeRange}</div>
+                      <div style={{ fontSize: 8, opacity: .8, fontWeight: 500 }}>{timeRange}</div>
                     </div>
                   );
                 })}
-                {editing && dragPreview && dragPreview.day === dayIdx && (
-                  <div style={{ position: "absolute", top: dragPreview.startSlot * ROW_H, left: 2, right: 2, height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10, background: "rgba(37,99,235,.15)", border: `2px dashed ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
+                {editing && dragPreview && dragPreview.day === dayIdx && (() => {
+                  const visTop = (dragPreview.startSlot - visRange.start) * ROW_H;
+                  return <div style={{ position: "absolute", top: visTop, left: 2, right: 2, height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10, background: "rgba(37,99,235,.2)", border: `2px dashed ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
                     {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
+                  </div>;
+                })()}
                   </div>
                 )}
               </div>
             ))}
           </div>
-          <div style={{ position: "absolute", left: LABEL_W, right: 0, top: HEADER_H + RESET_SLOT * ROW_H, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
-            <span style={{ position: "absolute", right: 4, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
-          </div>
+          {RESET_SLOT >= visRange.start && RESET_SLOT < visRange.end && (
+            <div style={{ position: "absolute", left: LABEL_W, right: 0, top: HEADER_H + (RESET_SLOT - visRange.start) * ROW_H, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
+              <span style={{ position: "absolute", right: 4, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
