@@ -697,8 +697,6 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                     {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
                   </div>;
                 })()}
-                  </div>
-                )}
               </div>
             ))}
           </div>
