@@ -205,12 +205,48 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const diffColor = DIFF_COLORS[boss?.difficulty] || "#94a3b8";
   const drops = boss ? getDropsForBoss(boss.bossName, boss.difficulty) : [];
   const isLead = party.leaderId === currentUser?.id;
+  const isMember = party.members?.some(m => m.userId === currentUser?.id);
   const [settingTime, setSettingTime] = useState(false);
   const [timeAnchor, setTimeAnchor] = useState(null);
   const [timeHover, setTimeHover] = useState(null);
   const [hoverTime, setHoverTime] = useState(null); // { day, slot } for tooltip
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editMembers, setEditMembers] = useState(false);
+  const [addDiscord, setAddDiscord] = useState("");
+  const [ignPopup, setIgnPopup] = useState(null);
+  const addRef = useRef(null);
   const gridRef = useRef(null);
+  const maxP = party.maxMembers || 6;
+
+  const removeMember = (idx) => {
+    const nm = party.members.filter((_, i) => i !== idx);
+    const up = { ...party, members: nm };
+    if (idx === 0 && nm.length > 0) { up.leaderId = nm[0].userId; up.members = nm.map((m, i) => i === 0 ? { ...m, isLead: true } : m); }
+    onUpdate(up);
+  };
+  const passLead = (idx) => {
+    const nm = party.members.map((m, i) => ({ ...m, isLead: i === idx }));
+    onUpdate({ ...party, members: nm, leaderId: nm[idx].userId });
+  };
+  const leaveParty = () => {
+    const idx = party.members.findIndex(m => m.userId === currentUser?.id);
+    if (idx >= 0) removeMember(idx);
+    onBack();
+  };
+  const addMemberByDiscord = (ign) => {
+    const name = addDiscord.trim();
+    if (!name || party.members.length >= maxP) return;
+    const nm = [...party.members, { userId: name, charName: ign || "TBD", isTemp: false }];
+    onUpdate({ ...party, members: nm });
+    setAddDiscord(""); setIgnPopup(null);
+    setTimeout(() => addRef.current?.focus(), 50);
+  };
+  const addTemp = (ign) => {
+    if (party.members.length >= maxP) return;
+    const nm = [...party.members, { userId: `temp_${Date.now()}`, charName: ign || "TBD", isTemp: true }];
+    onUpdate({ ...party, members: nm });
+    setIgnPopup(null);
+  };
 
   const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: allUsers.find(u => u.id === m.userId)?.availability || {} })) || []), [party.members, allUsers]);
   const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
@@ -252,17 +288,40 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           </div>}
         </div>
 
-        {/* Members — names only */}
+        {/* Members — editable */}
         <div style={{ ...BACKDROP, padding: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Members ({party.members?.length}/{party.maxMembers || 6})</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Members ({party.members?.length}/{maxP})</span>
+            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎"}</button>}
+          </div>
           {party.members?.map((m, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: i < party.members.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{m.charName}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", flex: 1 }}>{m.charName}</span>
               {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 8 }}>TEMP</span>}
               {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
+              {editMembers && isLead && i !== 0 && (
+                <div style={{ display: "flex", gap: 3 }}>
+                  <button onClick={() => passLead(i)} title="Make lead" style={{ width: 18, height: 18, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(37,99,235,.12)", color: ACCENT, fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
+                  <button onClick={() => removeMember(i)} title="Remove" style={{ width: 18, height: 18, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.12)", color: "#f87171", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                </div>
+              )}
             </div>
           ))}
+          {/* Leave party — any member */}
+          {isMember && !isLead && <button onClick={leaveParty} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 6, border: "1px solid rgba(239,68,68,.2)", background: "rgba(239,68,68,.06)", color: "#f87171", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>Leave Party</button>}
+          {/* Add members — lead only, in edit mode */}
+          {editMembers && isLead && party.members.length < maxP && (
+            <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid rgba(30,36,64,.3)" }}>
+              <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) setIgnPopup({ type: "discord" }); }} />
+                <button onClick={() => addDiscord.trim() && setIgnPopup({ type: "discord" })} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
+              </div>
+              <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "4px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
+            </div>
+          )}
         </div>
+        {ignPopup && <IGNPopup title={ignPopup.type === "discord" ? `IGN for ${addDiscord}` : "Temp Character Name"} hint={ignPopup.type === "discord" ? "In-game character name for this player." : "Name for temp slot."} onConfirm={ign => ignPopup.type === "discord" ? addMemberByDiscord(ign) : addTemp(ign)} onClose={() => setIgnPopup(null)} />}
 
         {/* Loot — compact with small PNGs */}
         {drops.length > 0 && (
