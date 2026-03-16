@@ -420,7 +420,6 @@ function ProfileModal({ user, onClose, onSave }) {
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
   const partyList = Object.values(parties || {}).filter(p => !p.skipped);
-  const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -428,6 +427,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const [dragging, setDragging] = useState(null);
   const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
+  const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
   const HEADER_H = 44;
