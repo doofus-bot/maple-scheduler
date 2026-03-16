@@ -356,11 +356,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                           <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>{m.charName}</span>
                           {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ width: 14, height: 14, borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.25)" : "rgba(255,255,255,.05)", color: isE ? "#10b981" : "#374151", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{isE ? "✓" : "—"}</button>}
                           {pd.method === "priority" && (isLead ? (
-                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 9, padding: "1px 4px", width: 36, backgroundImage: "none", textAlign: "center", color: hasPrio ? ACCENT : "#475569" }}>
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 10, padding: "2px 6px", width: 42, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4 }}>
                               <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>#{pi + 1}</option>)}
                             </select>
                           ) : (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: hasPrio ? ACCENT : "#374151", fontFamily: "'Comfortaa',sans-serif", minWidth: 16, textAlign: "center" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", fontFamily: "'Comfortaa',sans-serif", minWidth: 20, textAlign: "center", padding: "1px 5px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
                           ))}
                           {!pd.method && <span style={{ fontSize: 8, color: "#374151" }}>—</span>}
                         </div>
@@ -587,9 +587,9 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const y = e.clientY - rect.top + gridRef.current.scrollTop; // account for scroll
     const day = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
-    const slot = visRange.start + Math.floor((y - HEADER_H) / ((rect.height - HEADER_H) / visSlots));
+    const slot = visRange.start + Math.floor((y - HEADER_H) / ROW_H); // use ROW_H directly
     if (day < 0 || day > 6 || slot < visRange.start || slot >= visRange.end) return null;
     return { day, slot };
   };
