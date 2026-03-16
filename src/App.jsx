@@ -435,6 +435,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
     partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
+    // Parties (2+ members) always above solos (1 member)
+    m.unscheduled.sort((a, b) => {
+      const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
+      const bSolo = (b.members?.length || 0) <= 1 ? 1 : 0;
+      return aSolo - bSolo;
+    });
     for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
     return m;
   }, [partyList]);
@@ -754,68 +760,92 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 }
 /* ═══ CHARACTERS VIEW ═══ */
 function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss }) {
-  const pl = Object.values(parties || {}); const chars = user.characters || [];
-  if (chars.length === 0) return <div style={{ ...BACKDROP, textAlign: "center", padding: "60px 20px" }}><div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Comfortaa',sans-serif", color: "#94a3b8" }}>No characters registered</div><div style={{ fontSize: 13, marginTop: 6, color: "#64748b" }}>Go to Profile Settings to add your IGNs</div></div>;
+  const pl = Object.values(parties || {}); const allChars = (user.characters || []).slice(0, 12);
+  const [page, setPage] = useState(0);
+  const PER_PAGE = 6;
+  const totalPages = Math.ceil(allChars.length / PER_PAGE);
+  const chars = allChars.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+
+  if (allChars.length === 0) return <div style={{ ...BACKDROP, textAlign: "center", padding: "60px 20px" }}><div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Comfortaa',sans-serif", color: "#94a3b8" }}>No characters registered</div><div style={{ fontSize: 13, marginTop: 6, color: "#64748b" }}>Go to Profile Settings to add your IGNs</div></div>;
   const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
   const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && p.bosses?.some(b => b.bossName === bn));
 
   const eBtn = { width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "transform .1s" };
+  const sBtnBase = { width: 22, height: 14, borderRadius: 4, border: "none", cursor: "pointer", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .1s", lineHeight: 1 };
 
   return (
-    <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
-        <thead><tr>
-          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-          {chars.map(c => <th key={c} style={{ padding: "12px 8px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 110 }}>{c}</th>)}
-        </tr></thead>
-        <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
-          <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
-          {chars.map(cn => {
-            const p = find(cn, bn);
-            const skip = findSkip(cn, bn);
-            const isSkipped = skip && !p;
-            return (
-              <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : "transparent" }}>
-                <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                  {/* Status indicator */}
-                  {p && (() => {
-                    const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-                    return <button onClick={() => onClickParty(p)} title={solo ? "Solo — click to view" : `${b?.difficulty} · ${p.members?.length}p — click to view`}
-                      style={{ padding: "3px 10px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
-                        background: solo ? "rgba(34,197,94,.15)" : `${dc}20`,
-                        border: `1px solid ${solo ? "rgba(34,197,94,.35)" : dc + "44"}`,
-                        color: solo ? "#10b981" : dc }}>
-                      {solo ? "Solo" : `${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
-                    </button>;
-                  })()}
-                  {isSkipped && <span title="Skipped this week" style={{ fontSize: 11, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
+    <div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1 }}>← Prev</button>
+          <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
+            Page {page + 1} of {totalPages} ({allChars.length} characters)
+          </span>
+          <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1 }}>Next →</button>
+        </div>
+      )}
+      <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
+          <thead><tr>
+            <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
+            {chars.map(c => <th key={c} style={{ padding: "12px 8px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 100 }}>{c}</th>)}
+          </tr></thead>
+          <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+            <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
+            {chars.map(cn => {
+              const p = find(cn, bn);
+              const skip = findSkip(cn, bn);
+              const isSkipped = skip && !p;
+              return (
+                <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : "transparent" }}>
+                  <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "center" }}>
+                    {/* Status */}
+                    {p && (() => {
+                      const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                      return <button onClick={() => onClickParty(p)} title={solo ? "Solo — click to view" : `${b?.difficulty} · ${p.members?.length}p — click to view`}
+                        style={{ padding: "3px 8px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
+                          background: solo ? "rgba(34,197,94,.15)" : `${dc}20`,
+                          border: `1px solid ${solo ? "rgba(34,197,94,.35)" : dc + "44"}`,
+                          color: solo ? "#10b981" : dc }}>
+                        {solo ? "Solo" : `${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
+                      </button>;
+                    })()}
+                    {isSkipped && <span title="Skipped this week" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
 
-                  {/* Action emojis */}
-                  <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
-                    style={{ ...eBtn, background: "rgba(37,99,235,.08)" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
-                    ➕
-                  </button>
-                  {!p && <button onClick={() => onCreateSolo(bn, cn)} title="Solo"
-                    style={{ ...eBtn, background: "rgba(34,197,94,.1)" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
-                    1️⃣
-                  </button>}
-                  {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} title="Skip this week"
-                    style={{ ...eBtn, background: "rgba(100,116,139,.06)" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
-                    ⏭️
-                  </button>}
-                  {isSkipped && <button onClick={() => onSkipBoss(bn, cn, true)} title="Undo skip"
-                    style={{ ...eBtn, background: "rgba(100,116,139,.04)" }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
-                    ↩️
-                  </button>}
-                </div>
-              </td>
-            );
-          })}</tr>)}</tbody>
-      </table>
+                    {/* ➕ full size */}
+                    <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
+                      style={{ ...eBtn, background: "rgba(37,99,235,.08)" }}
+                      onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                      ➕
+                    </button>
+
+                    {/* Small stacked buttons next to ➕ */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {!p && <button onClick={() => onCreateSolo(bn, cn)} title="Solo"
+                        style={{ ...sBtnBase, background: "rgba(34,197,94,.12)" }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                        1️⃣
+                      </button>}
+                      {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} title="Skip this week"
+                        style={{ ...sBtnBase, background: "rgba(100,116,139,.08)" }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                        ⏭️
+                      </button>}
+                      {isSkipped && <button onClick={() => onSkipBoss(bn, cn, true)} title="Undo skip"
+                        style={{ ...sBtnBase, background: "rgba(100,116,139,.06)" }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                        ↩️
+                      </button>}
+                    </div>
+                  </div>
+                </td>
+              );
+            })}</tr>)}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
