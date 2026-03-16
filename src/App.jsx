@@ -25,7 +25,7 @@ const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" 
 const DIFF_COLORS = { Easy: "#858585", Normal: "#32AAB0", Hard: "#B93062", Chaos: "#EA6C2B", Extreme: "#EA6C2B" };
 const ACCENT = "#2563eb", ACCENT_LIGHT = "rgba(37,99,235,0.15)", ACCENT_BORDER = "rgba(37,99,235,0.3)";
 const SOLO_COLOR = "#c45c5c", SOLO_BG = "rgba(196,92,92,0.18)", SOLO_BORDER = "rgba(196,92,92,0.35)";
-const BACKDROP = { background: "rgba(11,14,26,0.82)", backdropFilter: "blur(8px)", borderRadius: 14, border: "1px solid rgba(30,36,64,0.6)" };
+const BACKDROP = { background: "rgba(11,14,26,0.95)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(30,36,64,0.6)" };
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Toronto", "America/Vancouver", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Australia/Sydney", "America/Sao_Paulo", "America/Mexico_City", "UTC"];
@@ -419,16 +419,16 @@ function ProfileModal({ user, onClose, onSave }) {
 
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
-  const partyList = Object.values(parties || {});
+  const partyList = Object.values(parties || {}).filter(p => !p.skipped);
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(null);
   const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
   const gridRef = useRef(null);
 
   const HEADER_H = 44;
-  const ROW_H = 18;
   const SLOT_COUNT = 48;
   const LABEL_W = 50;
 
@@ -439,16 +439,45 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     return m;
   }, [partyList]);
 
-  // Smart visible range — condensed to relevant hours, full in edit mode
   const visRange = useMemo(() => {
-    if (editing) return { start: 0, end: 48 };
-    let rawMin = RESET_SLOT - 12, rawMax = RESET_SLOT + 12;
-    for (let d = 0; d < 7; d++) for (let s = 0; s < 48; s++) { if (avail[`${d}-${s}`] === "available") { rawMin = Math.min(rawMin, s); rawMax = Math.max(rawMax, s + 1); } }
-    partyList.forEach(p => { if (p.utcDay != null) { const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((p.duration || 30) / 30)); rawMin = Math.min(rawMin, ss); rawMax = Math.max(rawMax, ss + dur); } });
-    return { start: Math.max(0, rawMin - 1), end: Math.min(48, rawMax + 1) };
-  }, [editing, avail, partyList]);
+    // Full grid when editing or expanded
+    if (editing || expanded) {
+      // Expanded: show full availability range
+      let rawMin = 48, rawMax = 0;
+      for (let d = 0; d < 7; d++) for (let s = 0; s < 48; s++) { if (avail[`${d}-${s}`] === "available") { rawMin = Math.min(rawMin, s); rawMax = Math.max(rawMax, s + 1); } }
+      partyList.forEach(p => { if (p.utcDay != null) { const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((p.duration || 30) / 30)); rawMin = Math.min(rawMin, ss); rawMax = Math.max(rawMax, ss + dur); } });
+      if (rawMin >= rawMax) return { start: 0, end: 48 };
+      // Include reset
+      rawMin = Math.min(rawMin, RESET_SLOT);
+      rawMax = Math.max(rawMax, RESET_SLOT + 1);
+      return { start: Math.max(0, rawMin - 2), end: Math.min(48, rawMax + 2) };
+    }
+    // Default: compact 6hr window centered on scheduled bosses
+    let bossSlots = [];
+    partyList.forEach(p => {
+      if (p.utcDay != null) {
+        const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
+        const dur = Math.max(1, Math.ceil((p.duration || 30) / 30));
+        for (let i = ss; i < ss + dur; i++) bossSlots.push(i);
+      }
+    });
+    if (bossSlots.length === 0) {
+      // No scheduled bosses — small window around reset
+      return { start: Math.max(0, RESET_SLOT - 6), end: Math.min(48, RESET_SLOT + 6) };
+    }
+    let mn = Math.min(...bossSlots), mx = Math.max(...bossSlots);
+    // If boss span already > 12 slots (6hrs), use that plus padding
+    const bossSpan = mx - mn + 1;
+    const minWindow = Math.max(12, bossSpan); // at least 6hrs
+    // Center the window on the boss midpoint
+    const mid = Math.floor((mn + mx) / 2);
+    const halfW = Math.ceil(minWindow / 2) + 2; // +2 padding
+    return { start: Math.max(0, mid - halfW), end: Math.min(48, mid + halfW) };
+  }, [editing, expanded, avail, partyList]);
 
   const visSlots = visRange.end - visRange.start;
+  const maxGridH = typeof window !== "undefined" ? window.innerHeight - 160 : 600;
+  const ROW_H = Math.max(24, Math.min(44, Math.floor(maxGridH / visSlots)));
   const gridH = visSlots * ROW_H;
 
   // Duration in 30-min slots
@@ -561,14 +590,23 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
       <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         {/* Edit controls */}
         <div style={{ ...BACKDROP, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editing ? 8 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
               style={{ fontSize: 12, padding: "5px 14px", borderRadius: 8, border: `1px solid ${editing ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: editing ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: editing ? ACCENT : "#94a3b8" }}>
               {editing ? "✓ Done" : "✎ Edit Schedule"}
             </button>
             {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 11, padding: "4px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
           </div>
-          {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Drag parties to reschedule</div>}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <button onClick={() => setExpanded(!expanded)}
+              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
+              {expanded ? "▾ Collapse" : "▸ Expand"}
+            </button>
+            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>
+              {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)} ({Math.round(visSlots / 2)}hrs)
+            </span>
+          </div>
+          {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 6 }}>Drag parties to reschedule</div>}
         </div>
 
         {/* Unscheduled — drop zone in edit mode */}
@@ -634,7 +672,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
       {/* ── RIGHT — Schedule Grid ── */}
       <div style={{ ...BACKDROP, padding: 16, position: "relative", flex: 1, minWidth: 0 }}>
-        <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
+        <div ref={gridRef} style={{ position: "relative", overflow: "auto", maxHeight: "calc(100vh - 140px)" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
           <div style={{ display: "flex", height: HEADER_H }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
@@ -656,15 +694,15 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               })}
             </div>
             {Array.from({ length: 7 }, (_, dayIdx) => (
-              <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(30,36,64,.15)" }}>
+              <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.08)" }}>
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
                   const hasA = isAvail(dayIdx, si);
                   const is4hr = si % 8 === 0 && si > 0;
                   return <div key={vi} style={{
                     position: "absolute", top: vi * ROW_H, left: 0, right: 0, height: ROW_H,
-                    background: hasA ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.08)",
-                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.15)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.15)" : "1px solid rgba(30,36,64,.06)",
+                    background: hasA ? "rgba(34,197,94,.2)" : "rgba(20,24,41,.6)",
+                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.25)" : "1px solid rgba(30,36,64,.12)",
                   }} />;
                 })}
                 {(byDay[dayIdx] || []).map(p => {
@@ -676,24 +714,28 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)} style={{
-                      position: "absolute", top: visTop + 1, left: 2, right: 2,
-                      height: durS * ROW_H - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "2px 5px", overflow: "hidden",
-                      background: solo ? SOLO_BG : `${dc}30`,
-                      border: "1.5px solid rgba(255,255,255,.5)",
-                      boxShadow: "0 0 6px rgba(255,255,255,.15)",
-                      fontSize: 9, fontWeight: 700, color: solo ? SOLO_COLOR : dc, fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", flexDirection: "column", justifyContent: "center",
-                      ...(editing ? { outline: `1px dashed ${dc}88` } : {}),
+                      position: "absolute", top: visTop + 1, left: 3, right: 3,
+                      height: durS * ROW_H - 2, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
+                      padding: "4px 8px", overflow: "hidden",
+                      background: solo ? "rgba(160,70,70,.85)" : `rgba(20,24,41,.9)`,
+                      border: `2px solid ${solo ? "#c45c5c" : dc}`,
+                      boxShadow: `0 0 8px ${dc}44, inset 0 0 20px rgba(0,0,0,.3)`,
+                      fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", fontFamily: "'Comfortaa',sans-serif",
+                      display: "flex", flexDirection: "column", justifyContent: "center", lineHeight: 1.3,
+                      ...(editing ? { outline: `1px dashed rgba(255,255,255,.4)` } : {}),
                     }}>
-                      <div>{solo ? "Solo" : b?.bossName}{!solo && <span style={{ fontWeight: 400, opacity: .7 }}> · {p.members?.length}p</span>}</div>
-                      <div style={{ fontSize: 8, opacity: .8, fontWeight: 500 }}>{timeRange}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span>{solo ? "Solo" : b?.bossName}</span>
+                        {!solo && <span style={{ fontSize: 9, opacity: .7 }}>· {p.members?.length}p</span>}
+                        <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc, marginLeft: 2 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                      </div>
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,.6)", fontWeight: 500 }}>{timeRange}</div>
                     </div>
                   );
                 })}
                 {editing && dragPreview && dragPreview.day === dayIdx && (() => {
                   const visTop = (dragPreview.startSlot - visRange.start) * ROW_H;
-                  return <div style={{ position: "absolute", top: visTop, left: 2, right: 2, height: dragPreview.durSlots * ROW_H, borderRadius: 5, zIndex: 10, background: "rgba(37,99,235,.2)", border: `2px dashed ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
+                  return <div style={{ position: "absolute", top: visTop, left: 3, right: 3, height: dragPreview.durSlots * ROW_H, borderRadius: 6, zIndex: 10, background: "rgba(37,99,235,.3)", border: `2px dashed ${ACCENT}`, boxShadow: `0 0 12px ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
                     {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
                   </div>;
                 })()}
@@ -711,26 +753,59 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   );
 }
 /* ═══ CHARACTERS VIEW ═══ */
-function CharactersView({ parties, user, onCreateParty, onClickParty }) {
+function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss }) {
   const pl = Object.values(parties || {}); const chars = user.characters || [];
   if (chars.length === 0) return <div style={{ ...BACKDROP, textAlign: "center", padding: "60px 20px" }}><div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Comfortaa',sans-serif", color: "#94a3b8" }}>No characters registered</div><div style={{ fontSize: 13, marginTop: 6, color: "#64748b" }}>Go to Profile Settings to add your IGNs</div></div>;
-  const find = (cn, bn) => pl.find(p => p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
+  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
+  const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && p.bosses?.some(b => b.bossName === bn));
+
+  const btnS = { padding: "3px 8px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", display: "inline-flex", alignItems: "center", gap: 3 };
+
   return (
     <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
         <thead><tr>
           <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-          {chars.map(c => <th key={c} style={{ padding: "12px 16px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 130 }}>{c}</th>)}
+          {chars.map(c => <th key={c} style={{ padding: "12px 16px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 150 }}>{c}</th>)}
         </tr></thead>
         <tbody>{BOSS_ORDER.map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
-          <td style={{ padding: "12px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
-          {chars.map(cn => { const p = find(cn, bn);
-            if (p) { const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-              if (solo) return <td key={cn} style={{ padding: "8px 12px", textAlign: "center" }}><button onClick={() => onClickParty(p)} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${SOLO_BORDER}`, cursor: "pointer", background: SOLO_BG, color: SOLO_COLOR, fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Solo</button></td>;
-              return <td key={cn} style={{ padding: "8px 12px", textAlign: "center" }}><button onClick={() => onClickParty(p)} style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${dc}33`, cursor: "pointer", background: `${dc}18`, color: dc, fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{b?.difficulty} · {p.members?.length}p</button></td>;
-            }
-            return <td key={cn} style={{ padding: "8px 12px", textAlign: "center" }}><button onClick={() => onCreateParty(bn, "", cn)} style={{ padding: "5px 14px", borderRadius: 6, border: "1px dashed rgba(30,36,64,.6)", cursor: "pointer", background: "rgba(11,14,26,.4)", color: "#475569", fontSize: 11, fontFamily: "'Comfortaa',sans-serif", transition: "all .15s" }}
-              onMouseEnter={e => { e.target.style.borderColor = ACCENT; e.target.style.color = ACCENT; }} onMouseLeave={e => { e.target.style.borderColor = "rgba(30,36,64,.6)"; e.target.style.color = "#475569"; }}>+ Create</button></td>;
+          <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
+          {chars.map(cn => {
+            const p = find(cn, bn);
+            const skip = findSkip(cn, bn);
+            return (
+              <td key={cn} style={{ padding: "8px 8px", textAlign: "center", verticalAlign: "middle" }}>
+                {/* Current status */}
+                {p && (() => {
+                  const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                  return <div style={{ marginBottom: 6 }}>
+                    <button onClick={() => onClickParty(p)} style={{ ...btnS, padding: "4px 12px", fontSize: 11, background: solo ? SOLO_BG : `${dc}18`, border: `1px solid ${solo ? SOLO_BORDER : dc + "33"}`, color: solo ? SOLO_COLOR : dc }}>
+                      {solo ? "Solo" : `${b?.difficulty} · ${p.members?.length}p`}
+                    </button>
+                  </div>;
+                })()}
+                {skip && !p && <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>⏩ Skipped</span>
+                </div>}
+
+                {/* Action buttons — always visible */}
+                <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button onClick={() => onCreateParty(bn, "", cn)} style={{ ...btnS, background: "rgba(37,99,235,.1)", color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}
+                    onMouseEnter={e => { e.currentTarget.style.background = ACCENT_LIGHT; }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(37,99,235,.1)"; }}>
+                    + Party
+                  </button>
+                  {!p && <button onClick={() => onCreateSolo(bn, cn)} style={{ ...btnS, background: SOLO_BG, color: SOLO_COLOR, border: `1px solid ${SOLO_BORDER}` }}>
+                    🧍 Solo
+                  </button>}
+                  {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} style={{ ...btnS, background: "rgba(100,116,139,.1)", color: "#64748b", border: "1px solid rgba(100,116,139,.2)" }}>
+                    ⏩ Skip
+                  </button>}
+                  {skip && !p && <button onClick={() => onSkipBoss(bn, cn, true)} style={{ ...btnS, background: "rgba(100,116,139,.06)", color: "#475569", border: "1px solid rgba(100,116,139,.15)" }}>
+                    Undo Skip
+                  </button>}
+                </div>
+              </td>
+            );
           })}</tr>)}</tbody>
       </table>
     </div>
@@ -798,6 +873,36 @@ export default function App() {
   const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } setShowProfile(false); };
   const openParty = p => { setSelectedParty(p); setView("party"); };
   const openCreate = (bn, d, cn) => { setCreateDefaults({ boss: bn, diff: d, char: cn }); setShowCreate(true); };
+  const handleCreateSolo = async (bossName, charName) => {
+    const bossObj = BOSSES.find(b => b.name === bossName);
+    if (!bossObj || bossObj.diffs.length === 0) return;
+    // Default to first difficulty
+    const diff = bossObj.diffs[0];
+    const drops = getDropsForBoss(bossName, diff);
+    const party = {
+      id: Date.now().toString(36), leaderId: user.id,
+      members: [{ userId: user.id, charName, isTemp: false, isLead: true }],
+      maxMembers: getMaxParty(bossName, diff),
+      bosses: [{ id: "b0", bossName, difficulty: diff }],
+      utcDay: null, utcHour: null, utcMin: null, duration: 30, notes: "",
+      drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })),
+    };
+    await save({ ...parties, [party.id]: party });
+  };
+  const handleSkipBoss = async (bossName, charName, undoSkip) => {
+    if (undoSkip) {
+      // Remove the skip entry
+      const skipId = Object.keys(parties).find(id => parties[id].skipped && parties[id]._skipChar?.toLowerCase() === charName.toLowerCase() && parties[id].bosses?.some(b => b.bossName === bossName));
+      if (skipId) { const np = { ...parties }; delete np[skipId]; await save(np); }
+    } else {
+      const skipEntry = {
+        id: `skip_${Date.now().toString(36)}`, skipped: true, _skipChar: charName,
+        bosses: [{ id: "b0", bossName, difficulty: "" }],
+        members: [], leaderId: user.id,
+      };
+      await save({ ...parties, [skipEntry.id]: skipEntry });
+    }
+  };
 
   if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
   if (!user) return <><style>{globalCSS}</style><LoginPage /></>;
@@ -820,7 +925,7 @@ export default function App() {
         {view === "party" && selectedParty ? (
           <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
         ) : view === "characters" ? (
-          <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} />
+          <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} onCreateSolo={handleCreateSolo} onSkipBoss={handleSkipBoss} />
         ) : (
           <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} />
         )}
