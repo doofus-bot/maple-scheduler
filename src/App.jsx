@@ -39,6 +39,28 @@ function getDropsForBoss(b, d) { return (BOSS_DROPS[b] || []).filter(x => x.diff
 const offsetMin = new Date().getTimezoneOffset();
 const RESET_SLOT = ((Math.round(-offsetMin / 30) % 48) + 48) % 48;
 
+/* Next run timestamp calculator */
+function getNextRun(utcDay, utcHour, utcMin, duration) {
+  // utcDay: 0=Mon..6=Sun → JS getUTCDay: 0=Sun,1=Mon..6=Sat
+  const jsDay = (utcDay + 1) % 7;
+  const now = new Date();
+  const nowDay = now.getUTCDay();
+  let daysUntil = (jsDay - nowDay + 7) % 7;
+  // Build candidate date
+  const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntil, utcHour, utcMin, 0));
+  // If it's in the past, add 7 days
+  if (candidate.getTime() <= now.getTime()) candidate.setUTCDate(candidate.getUTCDate() + 7);
+  const startUnix = Math.floor(candidate.getTime() / 1000);
+  const endUnix = startUnix + (duration || 30) * 60;
+  // Reset offset: hours after Thursday 0 UTC
+  const totalMins = ((utcDay - 3 + 7) % 7) * 24 * 60 + utcHour * 60 + utcMin;
+  const rd = Math.floor(totalMins / (24 * 60)), rh = Math.floor((totalMins % (24 * 60)) / 60), rm = totalMins % 60;
+  const resetLabel = "Reset +" + (rd > 0 ? `${rd}d ` : "") + (rh > 0 || rd > 0 ? `${rh}h` : "") + (rm > 0 ? `${rm}m` : rh === 0 && rd === 0 ? "0" : "");
+  // Local day name
+  const localDay = candidate.toLocaleDateString("en-US", { weekday: "long" });
+  return { startUnix, endUnix, resetLabel, localDay };
+}
+
 /* ═══ API ═══ */
 const API = {
   async get(p) { const r = await fetch(p, { credentials: "include" }); if (r.status === 401) return null; return r.json(); },
@@ -217,6 +239,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const [hoverTime, setHoverTime] = useState(null); // { day, slot } for tooltip
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editMembers, setEditMembers] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [addDiscord, setAddDiscord] = useState("");
   const [ignPopup, setIgnPopup] = useState(null);
   const addRef = useRef(null);
@@ -280,7 +303,22 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
             <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
             <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
           </div>
-          {party.utcDay != null && (() => { const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); const es = Math.min(ss + dur, 48); return <div style={{ fontSize: 11, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Perm: {DAYS_SHORT[party.utcDay]} {slotToTime(ss)} – {slotToTime(es)}</div>; })()}
+          {party.utcDay != null && (() => {
+            const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
+            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
+            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+            return <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{run.localDay}</div>
+              <div style={{ background: "rgba(11,14,26,.5)", borderRadius: 8, padding: "8px 10px", border: "1px solid rgba(30,36,64,.4)", fontFamily: "'Comfortaa',sans-serif", position: "relative" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
+                <div style={{ fontSize: 10, color: "#64748b", wordBreak: "break-all", lineHeight: 1.6 }}>
+                  <div>{`<t:${run.startUnix}:R>`}</div>
+                  <div>{`<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`}</div>
+                </div>
+                <button onClick={copyIt} title="Copy for Discord" style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s" }}>{copied ? "✓" : "📋"}</button>
+              </div>
+            </div>;
+          })()}
           {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
           {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => { setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null); }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
