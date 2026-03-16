@@ -420,9 +420,11 @@ function ProfileModal({ user, onClose, onSave }) {
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
   const partyList = Object.values(parties || {}).filter(p => !p.skipped);
+  const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showSolos, setShowSolos] = useState(true);
   const [dragging, setDragging] = useState(null);
   const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
@@ -434,7 +436,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
-    partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
+    displayList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
     // Parties (2+ members) always above solos (1 member)
     m.unscheduled.sort((a, b) => {
       const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
@@ -443,7 +445,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     });
     for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
     return m;
-  }, [partyList]);
+  }, [displayList]);
 
   const visRange = useMemo(() => {
     // Full grid when editing or expanded
@@ -603,13 +605,19 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             </button>
             {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 11, padding: "4px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
           </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <button onClick={() => setExpanded(!expanded)}
-              style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
-              {expanded ? "▾ Collapse" : "▸ Expand"}
-            </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setExpanded(!expanded)}
+                style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
+                {expanded ? "▾ Collapse" : "▸ Expand"}
+              </button>
+              <button onClick={() => setShowSolos(!showSolos)}
+                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
+                {showSolos ? "👤 Solos" : "👤 Hidden"}
+              </button>
+            </div>
             <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>
-              {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)} ({Math.round(visSlots / 2)}hrs)
+              {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)}
             </span>
           </div>
           {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 6 }}>Drag parties to reschedule</div>}
@@ -624,13 +632,17 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {byDay.unscheduled.map(p => {
                 const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1; const dur = p.duration || 30;
+                const charName = p.members?.[0]?.charName || "—";
                 return (
-                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? SOLO_BG : `${dc}10`, border: `1px solid ${solo ? SOLO_BORDER : dc + "25"}`, userSelect: "none" }}>
+                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                       <div onClick={() => !editing && onClickParty(p)} style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                        <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
-                        {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: SOLO_COLOR }}>Solo</span>}
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                          {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{charName}{!solo && p.members?.length > 1 ? ` +${p.members.length - 1}` : ""}</div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
@@ -813,7 +825,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         {solo ? "Solo" : `${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
                       </button>;
                     })()}
-                    {isSkipped && <span title="Skipped this week" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
+                    {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
 
                     {/* ➕ full size */}
                     <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
@@ -829,7 +841,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
                         1️⃣
                       </button>}
-                      {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} title="Skip this week"
+                      {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} title="Skip boss"
                         style={{ ...sBtnBase, background: "rgba(100,116,139,.08)" }}
                         onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
                         ⏭️
