@@ -28,6 +28,8 @@ const SOLO_COLOR = "#c45c5c", SOLO_BG = "rgba(196,92,92,0.18)", SOLO_BORDER = "r
 const BACKDROP = { background: "rgba(11,14,26,0.95)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(30,36,64,0.6)" };
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// Display order: Thu(3), Fri(4), Sat(5), Sun(6), Mon(0), Tue(1), Wed(2) — weekly reset is Thu 0 UTC
+const DAY_ORDER = [3, 4, 5, 6, 0, 1, 2];
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Toronto", "America/Vancouver", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Australia/Sydney", "America/Sao_Paulo", "America/Mexico_City", "UTC"];
 function getMaxParty(b, d) { if (b === "Lotus" && d === "Extreme") return 2; if (["Adversary", "Limbo", "Baldrix"].includes(b)) return 3; return 6; }
 function getDropsForBoss(b, d) { return (BOSS_DROPS[b] || []).filter(x => x.diffs === null || x.diffs.includes(d)); }
@@ -251,7 +253,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: allUsers.find(u => u.id === m.userId)?.availability || {} })) || []), [party.members, allUsers]);
   const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
 
-  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const d = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); return d < 0 || d > 6 || s < 0 || s > 47 ? null : { day: d, slot: s }; };
+  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); };
@@ -384,13 +386,13 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
             {/* Header */}
             <div style={{ height: 22 }} />
-            {DAYS_SHORT.map(d => <div key={d} style={{ height: 22, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "22px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{d}</div>)}
+            {DAY_ORDER.map(d => <div key={d} style={{ height: 22, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "22px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[d]}</div>)}
             {/* Time rows */}
             {Array.from({ length: 24 }, (_, h) => {
               const slot = h * 2;
               return [
                 <div key={`l${h}`} style={{ fontSize: 8, color: "#475569", textAlign: "right", paddingRight: 4, fontFamily: "'Comfortaa',sans-serif", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid rgba(30,36,64,.15)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>,
-                ...Array.from({ length: 7 }, (_, di) => {
+                ...DAY_ORDER.map(di => {
                   const info = getCellInfo(di, slot);
                   const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
                   const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
@@ -439,7 +441,7 @@ function ProfileModal({ user, onClose, onSave }) {
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => setChars(p => p.filter((_, j) => j !== i));
-  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const d = Math.floor((e.clientX - r.left - 40) / ((r.width - 40) / 7)); const s = Math.floor((e.clientY - r.top - 24) / ((r.height - 24) / 48)); return d < 0 || d > 6 || s < 0 || s > 47 ? null : { day: d, slot: s }; };
+  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 40) / ((r.width - 40) / 7)); const s = Math.floor((e.clientY - r.top - 24) / ((r.height - 24) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
   const getPreview = () => { if (!anchor || !hover || anchor.day !== hover.day) return new Set(); const s = new Set(); for (let i = Math.min(anchor.slot, hover.slot); i <= Math.max(anchor.slot, hover.slot); i++) s.add(`${anchor.day}-${i}`); return s; };
   const onClick = (e) => { e.preventDefault(); const pos = getSlot(e); if (!pos) return; if (!anchor) { const k = `${pos.day}-${pos.slot}`; setAnchor(pos); setMode(avail[k] === "available" ? "deselect" : "select"); } else { if (pos.day === anchor.day) { const mn = Math.min(anchor.slot, pos.slot), mx = Math.max(anchor.slot, pos.slot); setAvail(p => { const c = { ...p }; for (let s = mn; s <= mx; s++) { const k = `${pos.day}-${s}`; if (mode === "select") c[k] = "available"; else delete c[k]; } return c; }); } setAnchor(null); setHover(null); setMode(null); } };
   useEffect(() => { const h = e => { if (e.key === "Escape") { setAnchor(null); setHover(null); setMode(null); } }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, []);
@@ -460,10 +462,10 @@ function ProfileModal({ user, onClose, onSave }) {
         <label style={S.label}>Availability</label>
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "hidden", height: 420 }}
           onClick={onClick} onMouseMove={e => setHover(getSlot(e))} onMouseLeave={() => setHover(null)}>
-          <div style={{ display: "flex", height: 24 }}><div style={{ width: 40, flexShrink: 0 }} />{DAYS_SHORT.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Comfortaa',sans-serif" }}>{d}</div>)}</div>
+          <div style={{ display: "flex", height: 24 }}><div style={{ width: 40, flexShrink: 0 }} />{DAY_ORDER.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Comfortaa',sans-serif" }}>{DAYS_SHORT[d]}</div>)}</div>
           <div style={{ display: "flex", height: 396 }}>
             <div style={{ width: 40, flexShrink: 0, position: "relative" }}>{Array.from({ length: 24 }, (_, h) => <div key={h} style={{ position: "absolute", top: `${(h * 2 / 48) * 100}%`, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, transform: "translateY(-50%)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>)}</div>
-            {Array.from({ length: 7 }, (_, di) => <div key={di} style={{ flex: 1, display: "flex", flexDirection: "column", borderLeft: "1px solid rgba(255,255,255,.03)" }}>{Array.from({ length: 48 }, (_, si) => { const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si; return <div key={si} style={{ flex: 1, minHeight: 0, background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent", borderBottom: si % 2 === 1 ? "1px solid rgba(255,255,255,.03)" : "none", transition: "background .08s" }} />; })}</div>)}
+            {DAY_ORDER.map(di => <div key={di} style={{ flex: 1, display: "flex", flexDirection: "column", borderLeft: "1px solid rgba(255,255,255,.03)" }}>{Array.from({ length: 48 }, (_, si) => { const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si; return <div key={si} style={{ flex: 1, minHeight: 0, background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent", borderBottom: si % 2 === 1 ? "1px solid rgba(255,255,255,.03)" : "none", transition: "background .08s" }} />; })}</div>)}
           </div>
           <div style={{ position: "absolute", left: 40, right: 0, top: 24 + (RESET_SLOT / 48) * 396, height: 0, borderTop: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif" }}>0:00 UTC</span>
@@ -587,11 +589,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top + gridRef.current.scrollTop; // account for scroll
-    const day = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
-    const slot = visRange.start + Math.floor((y - HEADER_H) / ROW_H); // use ROW_H directly
-    if (day < 0 || day > 6 || slot < visRange.start || slot >= visRange.end) return null;
-    return { day, slot };
+    const y = e.clientY - rect.top + gridRef.current.scrollTop;
+    const col = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
+    const slot = visRange.start + Math.floor((y - HEADER_H) / ROW_H);
+    if (col < 0 || col > 6 || slot < visRange.start || slot >= visRange.end) return null;
+    return { day: DAY_ORDER[col], slot };
   };
 
   // Drag handlers
@@ -754,11 +756,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
       <div style={{ ...BACKDROP, padding: 16, position: "relative", flex: 1, minWidth: 0 }}>
         <div ref={gridRef} style={{ position: "relative", overflow: "auto", maxHeight: "calc(100vh - 140px)" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
-          <div style={{ display: "flex", height: HEADER_H }}>
+          {/* Sticky day headers */}
+          <div style={{ display: "flex", height: HEADER_H, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
-            {DAYS_SHORT.map((d, i) => (
-              <div key={d} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
-                {d}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[i]?.length || 0} boss{byDay[i]?.length !== 1 ? "es" : ""}</div>
+            {DAY_ORDER.map(di => (
+              <div key={di} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
+                {DAYS_SHORT[di]}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[di]?.length || 0} boss{byDay[di]?.length !== 1 ? "es" : ""}</div>
               </div>
             ))}
           </div>
@@ -773,7 +776,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 </div>;
               })}
             </div>
-            {Array.from({ length: 7 }, (_, dayIdx) => (
+            {DAY_ORDER.map(dayIdx => (
               <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.08)" }}>
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
