@@ -28,6 +28,7 @@ db.exec(`
     timezone TEXT DEFAULT 'America/New_York',
     characters TEXT DEFAULT '[]',
     availability TEXT DEFAULT '{}',
+    settings TEXT DEFAULT '{}',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -38,6 +39,9 @@ db.exec(`
 
   INSERT OR IGNORE INTO parties_store (id, data) VALUES (1, '{}');
 `);
+
+// Migration — add settings column if missing
+try { db.prepare("ALTER TABLE users ADD COLUMN settings TEXT DEFAULT '{}'").run(); } catch {}
 
 /* ════════════════════════════════════════
    MIDDLEWARE
@@ -163,18 +167,25 @@ function requireAuth(req, res, next) {
    ════════════════════════════════════════ */
 app.get("/api/me", requireAuth, (req, res) => {
   const u = req.user;
+  const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
 app.patch("/api/me", requireAuth, (req, res) => {
-  const { timezone, characters, availability } = req.body;
+  const { timezone, characters, availability, showSolos } = req.body;
   if (timezone) db.prepare("UPDATE users SET timezone = ? WHERE id = ?").run(timezone, req.user.id);
   if (characters !== undefined) db.prepare("UPDATE users SET characters = ? WHERE id = ?").run(JSON.stringify(characters), req.user.id);
   if (availability !== undefined) db.prepare("UPDATE users SET availability = ? WHERE id = ?").run(JSON.stringify(availability), req.user.id);
+  if (showSolos !== undefined) {
+    const cur = JSON.parse(db.prepare("SELECT settings FROM users WHERE id = ?").get(req.user.id)?.settings || "{}");
+    cur.showSolos = showSolos;
+    db.prepare("UPDATE users SET settings = ? WHERE id = ?").run(JSON.stringify(cur), req.user.id);
+  }
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
 app.get("/api/users", requireAuth, (req, res) => {
