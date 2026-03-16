@@ -759,49 +759,57 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
   const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && p.bosses?.some(b => b.bossName === bn));
 
-  const btnS = { padding: "3px 8px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", display: "inline-flex", alignItems: "center", gap: 3 };
+  const eBtn = { width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "transform .1s" };
 
   return (
     <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
         <thead><tr>
           <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-          {chars.map(c => <th key={c} style={{ padding: "12px 16px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 150 }}>{c}</th>)}
+          {chars.map(c => <th key={c} style={{ padding: "12px 8px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 110 }}>{c}</th>)}
         </tr></thead>
-        <tbody>{BOSS_ORDER.map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+        <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
           <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
           {chars.map(cn => {
             const p = find(cn, bn);
             const skip = findSkip(cn, bn);
+            const isSkipped = skip && !p;
             return (
-              <td key={cn} style={{ padding: "8px 8px", textAlign: "center", verticalAlign: "middle" }}>
-                {/* Current status */}
-                {p && (() => {
-                  const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-                  return <div style={{ marginBottom: 6 }}>
-                    <button onClick={() => onClickParty(p)} style={{ ...btnS, padding: "4px 12px", fontSize: 11, background: solo ? SOLO_BG : `${dc}18`, border: `1px solid ${solo ? SOLO_BORDER : dc + "33"}`, color: solo ? SOLO_COLOR : dc }}>
-                      {solo ? "Solo" : `${b?.difficulty} · ${p.members?.length}p`}
-                    </button>
-                  </div>;
-                })()}
-                {skip && !p && <div style={{ marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>⏩ Skipped</span>
-                </div>}
+              <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : "transparent" }}>
+                <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                  {/* Status indicator */}
+                  {p && (() => {
+                    const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                    return <button onClick={() => onClickParty(p)} title={solo ? "Solo — click to view" : `${b?.difficulty} · ${p.members?.length}p — click to view`}
+                      style={{ padding: "3px 10px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
+                        background: solo ? "rgba(34,197,94,.15)" : `${dc}20`,
+                        border: `1px solid ${solo ? "rgba(34,197,94,.35)" : dc + "44"}`,
+                        color: solo ? "#10b981" : dc }}>
+                      {solo ? "Solo" : `${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
+                    </button>;
+                  })()}
+                  {isSkipped && <span title="Skipped this week" style={{ fontSize: 11, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
 
-                {/* Action buttons — always visible */}
-                <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
-                  <button onClick={() => onCreateParty(bn, "", cn)} style={{ ...btnS, background: "rgba(37,99,235,.1)", color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}
-                    onMouseEnter={e => { e.currentTarget.style.background = ACCENT_LIGHT; }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(37,99,235,.1)"; }}>
-                    + Party
+                  {/* Action emojis */}
+                  <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
+                    style={{ ...eBtn, background: "rgba(37,99,235,.08)" }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                    ➕
                   </button>
-                  {!p && <button onClick={() => onCreateSolo(bn, cn)} style={{ ...btnS, background: SOLO_BG, color: SOLO_COLOR, border: `1px solid ${SOLO_BORDER}` }}>
-                    🧍 Solo
+                  {!p && <button onClick={() => onCreateSolo(bn, cn)} title="Solo"
+                    style={{ ...eBtn, background: "rgba(34,197,94,.1)" }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                    1️⃣
                   </button>}
-                  {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} style={{ ...btnS, background: "rgba(100,116,139,.1)", color: "#64748b", border: "1px solid rgba(100,116,139,.2)" }}>
-                    ⏩ Skip
+                  {!p && !skip && <button onClick={() => onSkipBoss(bn, cn)} title="Skip this week"
+                    style={{ ...eBtn, background: "rgba(100,116,139,.06)" }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                    ⏭️
                   </button>}
-                  {skip && !p && <button onClick={() => onSkipBoss(bn, cn, true)} style={{ ...btnS, background: "rgba(100,116,139,.06)", color: "#475569", border: "1px solid rgba(100,116,139,.15)" }}>
-                    Undo Skip
+                  {isSkipped && <button onClick={() => onSkipBoss(bn, cn, true)} title="Undo skip"
+                    style={{ ...eBtn, background: "rgba(100,116,139,.04)" }}
+                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+                    ↩️
                   </button>}
                 </div>
               </td>
