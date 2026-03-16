@@ -28,8 +28,11 @@ const SOLO_COLOR = "#c45c5c", SOLO_BG = "rgba(196,92,92,0.18)", SOLO_BORDER = "r
 const BACKDROP = { background: "rgba(11,14,26,0.95)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(30,36,64,0.6)" };
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-// Display order: Thu(3), Fri(4), Sat(5), Sun(6), Mon(0), Tue(1), Wed(2) — weekly reset is Thu 0 UTC
-const DAY_ORDER = [3, 4, 5, 6, 0, 1, 2];
+// Week starts on the local day that Thursday 0:00 UTC falls on
+// PT (UTC-7): Thu 0 UTC = Wed 5PM → starts Wed. UTC/East: starts Thu.
+const _localResetHour = -new Date().getTimezoneOffset() / 60;
+const _resetLocalDay = ((3 + Math.floor(_localResetHour / 24)) % 7 + 7) % 7;
+const DAY_ORDER = Array.from({ length: 7 }, (_, i) => (_resetLocalDay + i) % 7);
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Toronto", "America/Vancouver", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Australia/Sydney", "America/Sao_Paulo", "America/Mexico_City", "UTC"];
 function getMaxParty(b, d) { if (b === "Lotus" && d === "Extreme") return 2; if (["Adversary", "Limbo", "Baldrix"].includes(b)) return 3; return 6; }
 function getDropsForBoss(b, d) { return (BOSS_DROPS[b] || []).filter(x => x.diffs === null || x.diffs.includes(d)); }
