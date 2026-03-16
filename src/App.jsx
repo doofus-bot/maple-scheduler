@@ -889,12 +889,12 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
 
-                    {/* ➕ full size */}
-                    <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
+                    {/* ➕ full size — only when no party exists */}
+                    {!p && <button onClick={() => onCreateParty(bn, "", cn)} title="Create Party"
                       style={{ ...eBtn, background: "rgba(37,99,235,.08)" }}
                       onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
                       ➕
-                    </button>
+                    </button>}
 
                     {/* Small stacked buttons next to ➕ */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
