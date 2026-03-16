@@ -286,6 +286,10 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 8px" }}>No</button>
             </>}
           </div>}
+          {!isLead && isMember && <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave Party</button>
+          </div>}
+          {!isLead && !isMember && <div style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>View only</div>}
         </div>
 
         {/* Members — editable */}
@@ -307,8 +311,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               )}
             </div>
           ))}
-          {/* Leave party — any member */}
-          {isMember && !isLead && <button onClick={leaveParty} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 6, border: "1px solid rgba(239,68,68,.2)", background: "rgba(239,68,68,.06)", color: "#f87171", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>Leave Party</button>}
           {/* Add members — lead only, in edit mode */}
           {editMembers && isLead && party.members.length < maxP && (
             <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid rgba(30,36,64,.3)" }}>
@@ -482,7 +484,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [showSolos, setShowSolos] = useState(true);
+  const [showSolos, setShowSolos] = useState(user.showSolos !== false);
+  const toggleSolos = () => { const next = !showSolos; setShowSolos(next); API.patch("/api/me", { showSolos: next }).catch(() => {}); };
   const [dragging, setDragging] = useState(null);
   const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
@@ -670,7 +673,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
                 {expanded ? "▾ Collapse" : "▸ Expand"}
               </button>
-              <button onClick={() => setShowSolos(!showSolos)}
+              <button onClick={toggleSolos}
                 style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
                 {showSolos ? "👤 Solos" : "👤 Hidden"}
               </button>
