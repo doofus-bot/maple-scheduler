@@ -53,16 +53,20 @@ function getNextRun(localDay, localHour, localMin, duration) {
   if (candidate.getTime() <= now.getTime()) candidate.setDate(candidate.getDate() + 7);
   const startUnix = Math.floor(candidate.getTime() / 1000);
   const endUnix = startUnix + (duration || 30) * 60;
-  // Reset offset: Thursday 0:00 UTC is the weekly reset
-  // Find the most recent Thursday 0 UTC before/at this run
-  const resetThursday = new Date(Date.UTC(candidate.getUTCFullYear(), candidate.getUTCMonth(), candidate.getUTCDate()));
-  const utcDow = resetThursday.getUTCDay(); // 0=Sun..6=Sat
-  const daysSinceThurs = ((utcDow - 4) + 7) % 7; // 4=Thursday
-  resetThursday.setUTCDate(resetThursday.getUTCDate() - daysSinceThurs);
-  const resetUnix = Math.floor(resetThursday.getTime() / 1000);
-  const diffMins = Math.floor((startUnix - resetUnix) / 60);
-  const rd = Math.floor(diffMins / (24 * 60)), rh = Math.floor((diffMins % (24 * 60)) / 60), rm = diffMins % 60;
-  const resetLabel = "Reset +" + (rd > 0 ? `${rd}d ` : "") + (rh > 0 || rd > 0 ? `${rh}h` : "") + (rm > 0 ? `${rm}m` : rh === 0 && rd === 0 ? "0" : "");
+  // Reset label: relative to daily 00:00 UTC
+  // Positive = hours after reset, negative = hours before next reset (within 8hrs)
+  // Decimals for 15min intervals: .25, .5, .75. No "h" suffix.
+  const utcH = candidate.getUTCHours(), utcM = candidate.getUTCMinutes();
+  const hoursAfter = utcH + utcM / 60;
+  const hoursBefore = 24 - hoursAfter;
+  let resetLabel;
+  if (hoursBefore <= 8 && hoursAfter > 0) {
+    const v = Math.round(hoursBefore * 4) / 4; // round to .25
+    resetLabel = `Reset -${v % 1 === 0 ? v.toFixed(0) : v}`;
+  } else {
+    const v = Math.round(hoursAfter * 4) / 4;
+    resetLabel = `Reset +${v % 1 === 0 ? v.toFixed(0) : v}`;
+  }
   // Local day name for display
   const localDayName = candidate.toLocaleDateString("en-US", { weekday: "long" });
   return { startUnix, endUnix, resetLabel, localDay: localDayName };
