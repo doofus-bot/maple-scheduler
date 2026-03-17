@@ -527,7 +527,17 @@ function ProfileModal({ user, onClose, onSave }) {
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
   const [mode, setMode] = useState(null);
+  const [saving, setSaving] = useState(false);
   const gridRef = useRef(null);
+  const saveTimer = useRef(null);
+
+  // Auto-save with debounce
+  const doSave = useCallback((data) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSaving(true);
+    saveTimer.current = setTimeout(() => { onSave(data); setSaving(false); }, 400);
+  }, [onSave]);
+  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail }); }, [tz, chars, avail]);
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => setChars(p => p.filter((_, j) => j !== i));
@@ -539,7 +549,13 @@ function ProfileModal({ user, onClose, onSave }) {
 
   return (
     <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(720px,95vw)" }} onClick={e => e.stopPropagation()}>
-      <div style={S.modalHead}><span style={S.modalTitle}>Profile Settings</span><button style={S.closeBtn} onClick={onClose}>✕</button></div>
+      <div style={S.modalHead}>
+        <span style={S.modalTitle}>Profile Settings</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {saving && <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Saving...</span>}
+          <button style={S.closeBtn} onClick={onClose}>✕</button>
+        </div>
+      </div>
       <div style={S.modalBody}>
         <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
           <div style={{ flex: 1 }}><label style={S.label}>Discord</label><div style={{ ...S.input, background: "rgba(11,14,26,.3)", color: "#64748b" }}>{user.username}</div></div>
@@ -560,10 +576,6 @@ function ProfileModal({ user, onClose, onSave }) {
           <div style={{ position: "absolute", left: 40, right: 0, top: 24 + (RESET_SLOT / 48) * 396, height: 0, borderTop: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif" }}>0:00 UTC</span>
           </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-          <button style={{ ...S.btnGhost, color: "#f87171", borderColor: "rgba(239,68,68,.2)" }} onClick={() => setAvail({})}>Clear All</button>
-          <div style={{ display: "flex", gap: 10 }}><button style={S.btnGhost} onClick={onClose}>Cancel</button><button style={S.btnPrimary} onClick={() => onSave({ timezone: tz, characters: chars, availability: avail })}>Save Settings</button></div>
         </div>
       </div>
     </div></div>
@@ -1078,7 +1090,7 @@ export default function App() {
   };
   const handlePermDelete = id => { setTrash(prev => { const c = { ...prev }; delete c[id]; return c; }); };
   const handleUpdateParty = async p => { await save({ ...parties, [p.id]: p }); setSelectedParty(p); };
-  const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } setShowProfile(false); };
+  const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } };
   const openParty = p => { setSelectedParty(p); setView("party"); };
   const openCreate = (bn, d, cn) => { setCreateDefaults({ boss: bn, diff: d, char: cn }); setShowCreate(true); };
   const handleCreateSolo = async (bossName, charName) => {
