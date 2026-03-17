@@ -257,8 +257,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const boss = party.bosses?.[0];
   const diffColor = DIFF_COLORS[boss?.difficulty] || "#94a3b8";
   const drops = boss ? getDropsForBoss(boss.bossName, boss.difficulty) : [];
-  const isLead = party.leaderId === currentUser?.id;
-  const isMember = party.members?.some(m => m.userId === currentUser?.id);
+  const isLead = party.leaderId === currentUser?.id || party.leaderId === currentUser?.username;
+  const isMember = party.members?.some(m => m.userId === currentUser?.id || m.userId === currentUser?.username);
   const [settingTime, setSettingTime] = useState(false);
   const [timeAnchor, setTimeAnchor] = useState(null);
   const [timeHover, setTimeHover] = useState(null);
@@ -283,7 +283,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     onUpdate({ ...party, members: nm, leaderId: nm[idx].userId });
   };
   const leaveParty = () => {
-    const idx = party.members.findIndex(m => m.userId === currentUser?.id);
+    const idx = party.members.findIndex(m => m.userId === currentUser?.id || m.userId === currentUser?.username);
     if (idx >= 0) removeMember(idx);
     onBack();
   };
@@ -302,7 +302,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     setIgnPopup(null);
   };
 
-  const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: allUsers.find(u => u.id === m.userId)?.availability || {} })) || []), [party.members, allUsers]);
+  const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: (allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username === m.userId))?.availability || {} })) || []), [party.members, allUsers]);
   const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
 
   const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
@@ -361,26 +361,96 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           {!isLead && !isMember && <div style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>View only</div>}
         </div>
 
-        {/* Members — editable */}
+        {/* Combined Party — members + loot */}
         <div style={{ ...BACKDROP, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Members ({party.members?.length}/{maxP})</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
             {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎"}</button>}
           </div>
-          {party.members?.map((m, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: i < party.members.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", flex: 1 }}>{m.charName}</span>
-              {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 8 }}>TEMP</span>}
-              {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
-              {editMembers && isLead && i !== 0 && (
-                <div style={{ display: "flex", gap: 3 }}>
-                  <button onClick={() => passLead(i)} title="Make lead" style={{ width: 18, height: 18, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(37,99,235,.12)", color: ACCENT, fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
-                  <button onClick={() => removeMember(i)} title="Remove" style={{ width: 18, height: 18, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.12)", color: "#f87171", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+
+          {/* Drop method toggles — one row per drop */}
+          {drops.length > 0 && drops.map((drop, di) => {
+            const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
+            const did = pd.id || `d${di}`;
+            return <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "3px 6px", borderRadius: 6, background: "rgba(255,255,255,.02)" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
+              {isLead && <div style={{ display: "flex", gap: 3 }}>
+                {["blink", "priority"].map(mt => (
+                  <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
+                    style={{ ...S.btnGhost, fontSize: 8, padding: "2px 6px", ...(pd.method === mt ? S.btnActive : {}) }}>
+                    {mt === "blink" ? "Blink" : "Prio"}
+                  </button>
+                ))}
+              </div>}
+              {!isLead && pd.method && <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{pd.method === "blink" ? "Blink" : "Priority"}</span>}
+            </div>;
+          })}
+
+          {/* Character cards — 2 per row */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+            {party.members?.map((m, i) => {
+              const isMe = m.userId === currentUser?.id || m.userId === currentUser?.username;
+              const myChars = currentUser?.characters || [];
+              const switchChar = (newName) => { onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) }); };
+              return (
+                <div key={i} style={{ padding: "10px 8px", borderRadius: 10, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
+                  {/* Edit controls */}
+                  {editMembers && isLead && i !== 0 && (
+                    <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
+                      <button onClick={() => passLead(i)} title="Make lead" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(37,99,235,.15)", color: ACCENT, fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
+                      <button onClick={() => removeMember(i)} title="Remove" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                    </div>
+                  )}
+                  {/* Avatar */}
+                  <CharAvatar name={m.charName} size={44} />
+                  {/* IGN */}
+                  {isMe && myChars.length > 1 ? (
+                    <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 10, padding: "2px 4px", paddingRight: 16, width: "100%", backgroundPosition: "right 2px center", borderRadius: 5, textAlign: "center" }}>
+                      {myChars.map(c => <option key={c} value={c}>{c}</option>)}
+                      {!myChars.includes(m.charName) && <option value={m.charName}>{m.charName}</option>}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{m.charName}</span>
+                  )}
+                  {/* Badges */}
+                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "center" }}>
+                    {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
+                    {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 7 }}>TEMP</span>}
+                    {isMe && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 3, background: "rgba(37,99,235,.1)", color: ACCENT }}>YOU</span>}
+                  </div>
+                  {/* Loot status per drop */}
+                  {drops.length > 0 && <div style={{ width: "100%", marginTop: 2 }}>
+                    {drops.map((drop, di) => {
+                      const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
+                      const did = pd.id || `d${di}`;
+                      const isE = pd.eligible?.includes(m.userId);
+                      const pp = pd.priority?.indexOf(m.userId);
+                      const hasPrio = pp != null && pp >= 0;
+                      if (!pd.method) return null;
+                      return (
+                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 4px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
+                          <span style={{ fontSize: 8, color: "#475569", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{drop.name}</span>
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "1px 6px", borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 9, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
+                          {pd.method === "priority" && (isLead ? (
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 10, padding: "1px 3px", paddingRight: 3, width: 32, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 3, appearance: "none", WebkitAppearance: "none" }}>
+                              <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
+                            </select>
+                          ) : (
+                            <span style={{ fontSize: 9, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "1px 5px", borderRadius: 3, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>}
                 </div>
-              )}
-            </div>
-          ))}
-          {/* Add members — lead only, in edit mode */}
+              );
+            })}
+          </div>
+
+          {/* Leave party — non-lead members */}
+          {isMember && !isLead && <button onClick={leaveParty} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 6, border: "1px solid rgba(239,68,68,.2)", background: "rgba(239,68,68,.06)", color: "#f87171", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>Leave Party</button>}
+
+          {/* Add members — lead only, edit mode */}
           {editMembers && isLead && party.members.length < maxP && (
             <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid rgba(30,36,64,.3)" }}>
               <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
@@ -393,54 +463,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           )}
         </div>
         {ignPopup && <IGNPopup title={ignPopup.type === "discord" ? `IGN for ${addDiscord}` : "Temp Character Name"} hint={ignPopup.type === "discord" ? "In-game character name for this player." : "Name for temp slot."} onConfirm={ign => ignPopup.type === "discord" ? addMemberByDiscord(ign) : addTemp(ign)} onClose={() => setIgnPopup(null)} />}
-
-        {/* Loot — compact with small PNGs */}
-        {drops.length > 0 && (
-          <div style={{ ...BACKDROP, padding: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Loot</div>
-            {drops.map((drop, di) => {
-              const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
-              const did = pd.id || `d${di}`;
-              return (
-                <div key={di} style={{ marginBottom: di < drops.length - 1 ? 12 : 0, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
-                    {isLead && <div style={{ display: "flex", gap: 3 }}>
-                      {["blink", "priority"].map(mt => (
-                        <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
-                          style={{ ...S.btnGhost, fontSize: 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
-                          {mt === "blink" ? "Blink" : "Prio"}
-                        </button>
-                      ))}
-                    </div>}
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {party.members?.map((m, mi) => {
-                      const isE = pd.eligible?.includes(m.userId);
-                      const pp = pd.priority?.indexOf(m.userId);
-                      const hasPrio = pp != null && pp >= 0;
-                      return (
-                        <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 6, background: pd.method === "blink" ? (isE ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.05)") : "rgba(11,14,26,.3)", minWidth: 0, border: pd.method === "blink" && isE ? "1px solid rgba(34,197,94,.2)" : "1px solid transparent" }}>
-                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "2px solid #10b981", boxShadow: "0 0 6px rgba(34,197,94,.4)" } : pd.method === "blink" && !isE ? { opacity: 0.25, filter: "grayscale(1)" } : pd.method === "priority" && hasPrio ? { border: "1.5px solid " + ACCENT } : pd.method === "priority" && !hasPrio ? { opacity: 0.3 } : {}} />
-                          <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>{m.charName}</span>
-                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.15)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓ In" : "✕ Out"}</button>}
-                          {pd.method === "priority" && (isLead ? (
-                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 38, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
-                              <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
-                            </select>
-                          ) : (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", fontFamily: "'Comfortaa',sans-serif", minWidth: 20, textAlign: "center", padding: "1px 5px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
-                          ))}
-                          {!pd.method && <span style={{ fontSize: 8, color: "#374151" }}>—</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── RIGHT PANEL — Schedule Grid ── */}
@@ -464,16 +486,16 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
                   const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
                   const isHov = settingTime && hoverTime && hoverTime.day === di && (hoverTime.slot === slot || hoverTime.slot === slot + 1);
-                  let bg = "transparent";
-                  if (isSch) bg = "rgba(37,99,235,.45)";
-                  else if (isPr) bg = "rgba(37,99,235,.3)";
-                  else if (isHov) bg = "rgba(37,99,235,.18)";
-                  else if (info.bc > 0) bg = "rgba(251,191,36,.2)";
-                  else if (info.ac === 0) bg = "rgba(239,68,68,.18)";
-                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.25)";
-                  else if (info.ac > 0) bg = "rgba(34,197,94,.12)";
+                  let bg = "rgba(20,24,41,.8)"; // dark base instead of transparent
+                  if (isSch) bg = "rgba(37,99,235,.5)";
+                  else if (isPr) bg = "rgba(37,99,235,.35)";
+                  else if (isHov) bg = "rgba(37,99,235,.2)";
+                  else if (info.bc > 0) bg = "rgba(251,191,36,.35)";
+                  else if (info.ac === 0) bg = "rgba(239,68,68,.25)";
+                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.35)";
+                  else if (info.ac > 0) bg = "rgba(34,197,94,.18)";
                   const is4hr = h > 0 && h % 4 === 0;
-                  return <div key={`${h}-${di}`} style={{ borderTop: is4hr ? "1px solid rgba(255,255,255,.15)" : "1px solid rgba(30,36,64,.15)", borderLeft: "1px solid rgba(30,36,64,.08)", background: bg }} />;
+                  return <div key={`${h}-${di}`} style={{ minHeight: 20, borderTop: is4hr ? "1px solid rgba(255,255,255,.18)" : "1px solid rgba(30,36,64,.2)", borderLeft: "1px solid rgba(30,36,64,.12)", background: bg }} />;
                 }),
               ];
             }).flat()}
@@ -484,11 +506,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           </div>
         </div>
         {/* Legend */}
-        <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.45)", marginRight: 3, verticalAlign: "middle" }} />Sched</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.25)", marginRight: 3, verticalAlign: "middle" }} />Avail</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.18)", marginRight: 3, verticalAlign: "middle" }} />Busy</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.2)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
+        <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(37,99,235,.5)", marginRight: 3, verticalAlign: "middle" }} />Scheduled</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Available</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.25)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,191,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
       </div>
     </div>
