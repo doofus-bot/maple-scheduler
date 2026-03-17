@@ -145,6 +145,33 @@ function CharAvatar({ name, size = 36, style: extra }) {
 }
 
 /* ═══ IGN POPUP ═══ */
+/* ═══ PARTY HOVER CARD ═══ */
+function PartyHoverCard({ party, currentUserId, style: pos }) {
+  const b = party.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+  const fmtS = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+  const timeStr = party.utcDay != null ? (() => { const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); return `${DAYS_SHORT[party.utcDay]} ${fmtS(ss)} – ${fmtS(Math.min(ss + dur, 48))}`; })() : "Unscheduled";
+  const me = party.members?.find(m => m.userId === currentUserId);
+  const others = party.members?.filter(m => m.userId !== currentUserId) || [];
+  return (
+    <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...pos }}>
+      <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 160, maxWidth: 240 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+        </div>
+        <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>{timeStr}</div>
+        {me && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <CharAvatar name={me.charName} size={28} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{me.charName}</span>
+        </div>}
+        {others.length > 0 && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>
+          w/ {others.map(m => m.charName).join(", ")}
+        </div>}
+      </div>
+    </div>
+  );
+}
+
 function IGNPopup({ title, hint, onConfirm, onClose }) {
   const [ign, setIgn] = useState(""); const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
@@ -411,8 +438,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               // Look up this member's registered characters from allUsers
               const memberUser = allUsers.find(u => u.id === m.userId);
               const memberChars = memberUser?.characters || [];
-              const canEdit = isMe || (isLead && editMembers);
+              const canEditSelf = isMe && myChars.length > 1;
+              const canEditAsLead = isLead && editMembers && !isMe;
               const availChars = isMe ? myChars : memberChars;
+              const charOptions = [...new Set([...availChars, m.charName])];
+              const showDropdown = canEditSelf || (canEditAsLead && charOptions.length >= 1);
               const switchChar = (newName) => { onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) }); };
               return (
                 <div key={i} style={{ padding: "10px 8px", borderRadius: 10, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
@@ -426,10 +456,9 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   {/* Avatar */}
                   <CharAvatar name={m.charName} size={44} />
                   {/* IGN — editable by self or lead */}
-                  {canEdit && availChars.length > 1 ? (
+                  {showDropdown ? (
                     <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 10, padding: "2px 4px", paddingRight: 16, width: "100%", backgroundPosition: "right 2px center", borderRadius: 5, textAlign: "center" }}>
-                      {availChars.map(c => <option key={c} value={c}>{c}</option>)}
-                      {!availChars.includes(m.charName) && <option value={m.charName}>{m.charName}</option>}
+                      {charOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   ) : (
                     <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{m.charName}</span>
@@ -614,6 +643,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const [dragging, setDragging] = useState(null);
   const [dragPos, setDragPos] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
+  const [hoverParty, setHoverParty] = useState(null);
+  const [hoverPos, setHoverPos] = useState(null);
   const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
@@ -823,7 +854,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 return (
                   <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                      <div onClick={() => !editing && onClickParty(p)} style={{ flex: 1, minWidth: 0 }}>
+                      <div onClick={() => !editing && onClickParty(p)}
+                        onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); } }}
+                        onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                        onMouseLeave={() => setHoverParty(null)}
+                        style={{ flex: 1, minWidth: 0, cursor: editing ? "grab" : "pointer" }}>
                         <div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
                           <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
@@ -919,7 +954,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   const timeRange = fmtRange(p);
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
-                      onClick={() => !editing && onClickParty(p)} style={{
+                      onClick={() => !editing && onClickParty(p)}
+                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); } }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                      onMouseLeave={() => setHoverParty(null)}
+                      style={{
                       position: "absolute", top: visTop + 1, left: 3, right: 3,
                       height: durS * ROW_H - 2, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
                       padding: "4px 8px", overflow: "hidden",
@@ -955,6 +994,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           )}
         </div>
       </div>
+      {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
     </div>
   );
 }
@@ -963,6 +1003,8 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id) || (p.skipped && p.leaderId === user.id));
   const allChars = (user.characters || []).slice(0, 12);
   const [page, setPage] = useState(0);
+  const [hoverParty, setHoverParty] = useState(null);
+  const [hoverPos, setHoverPos] = useState(null);
   const PER_PAGE = 6;
   const totalPages = Math.ceil(allChars.length / PER_PAGE);
   const chars = allChars.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
@@ -1009,7 +1051,10 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     {/* Status */}
                     {p && (() => {
                       const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-                      return <button onClick={() => onClickParty(p)} title={solo ? "Solo — click to view" : `${b?.difficulty} · ${p.members?.length}p — click to view`}
+                      return <button onClick={() => onClickParty(p)}
+                        onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
+                        onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                        onMouseLeave={() => setHoverParty(null)}
                         style={{ padding: "3px 8px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
                           background: solo ? "rgba(34,197,94,.15)" : `${dc}20`,
                           border: `1px solid ${solo ? "rgba(34,197,94,.35)" : dc + "44"}`,
@@ -1050,6 +1095,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
             })}</tr>)}</tbody>
         </table>
       </div>
+      {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
     </div>
   );
 }
