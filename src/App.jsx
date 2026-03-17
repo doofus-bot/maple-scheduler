@@ -81,12 +81,27 @@ const API = {
 
 /* ═══ IMAGE CACHE ═══ */
 const imgCache = {};
+const imgListeners = {};
 function useCharImage(name) {
   const [img, setImg] = useState(imgCache[name] || null);
   useEffect(() => {
-    if (!name || imgCache[name] !== undefined) { setImg(imgCache[name] || null); return; }
-    imgCache[name] = null;
-    API.get(`/api/nexon/${encodeURIComponent(name)}`).then(d => { if (d?.imgUrl) { imgCache[name] = d.imgUrl; setImg(d.imgUrl); } });
+    if (!name) return;
+    // Subscribe to updates
+    if (!imgListeners[name]) imgListeners[name] = new Set();
+    imgListeners[name].add(setImg);
+    // If already resolved, set immediately
+    if (imgCache[name]) { setImg(imgCache[name]); return () => imgListeners[name]?.delete(setImg); }
+    // If not yet fetching, start fetch
+    if (imgCache[name] === undefined) {
+      imgCache[name] = null; // mark as loading
+      API.get(`/api/nexon/${encodeURIComponent(name)}`).then(d => {
+        if (d?.imgUrl) {
+          imgCache[name] = d.imgUrl;
+          imgListeners[name]?.forEach(fn => fn(d.imgUrl));
+        }
+      });
+    }
+    return () => imgListeners[name]?.delete(setImg);
   }, [name]);
   return img;
 }
@@ -405,10 +420,10 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                       const pp = pd.priority?.indexOf(m.userId);
                       const hasPrio = pp != null && pp >= 0;
                       return (
-                        <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 6, background: "rgba(11,14,26,.3)", minWidth: 0 }}>
-                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "1.5px solid #10b981" } : pd.method === "blink" && !isE ? { opacity: 0.3 } : pd.method === "priority" && hasPrio ? { border: "1.5px solid " + ACCENT } : pd.method === "priority" && !hasPrio ? { opacity: 0.3 } : {}} />
+                        <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 6, background: pd.method === "blink" ? (isE ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.05)") : "rgba(11,14,26,.3)", minWidth: 0, border: pd.method === "blink" && isE ? "1px solid rgba(34,197,94,.2)" : "1px solid transparent" }}>
+                          <CharAvatar name={m.charName} size={20} style={pd.method === "blink" && isE ? { border: "2px solid #10b981", boxShadow: "0 0 6px rgba(34,197,94,.4)" } : pd.method === "blink" && !isE ? { opacity: 0.25, filter: "grayscale(1)" } : pd.method === "priority" && hasPrio ? { border: "1.5px solid " + ACCENT } : pd.method === "priority" && !hasPrio ? { opacity: 0.3 } : {}} />
                           <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>{m.charName}</span>
-                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ width: 14, height: 14, borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.25)" : "rgba(255,255,255,.05)", color: isE ? "#10b981" : "#374151", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{isE ? "✓" : "—"}</button>}
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.15)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓ In" : "✕ Out"}</button>}
                           {pd.method === "priority" && (isLead ? (
                             <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 38, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
                               <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
