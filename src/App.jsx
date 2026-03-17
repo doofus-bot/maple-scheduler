@@ -40,25 +40,32 @@ const offsetMin = new Date().getTimezoneOffset();
 const RESET_SLOT = ((Math.round(-offsetMin / 30) % 48) + 48) % 48;
 
 /* Next run timestamp calculator */
-function getNextRun(utcDay, utcHour, utcMin, duration) {
-  // utcDay: 0=Mon..6=Sun → JS getUTCDay: 0=Sun,1=Mon..6=Sat
-  const jsDay = (utcDay + 1) % 7;
+function getNextRun(localDay, localHour, localMin, duration) {
+  // Stored day/hour/min are local-time-relative (grid shows local times)
+  // localDay: 0=Mon..6=Sun → JS getDay: 0=Sun,1=Mon..6=Sat
+  const jsDay = (localDay + 1) % 7;
   const now = new Date();
-  const nowDay = now.getUTCDay();
-  let daysUntil = (jsDay - nowDay + 7) % 7;
-  // Build candidate date
-  const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntil, utcHour, utcMin, 0));
+  const nowJsDay = now.getDay();
+  let daysUntil = (jsDay - nowJsDay + 7) % 7;
+  // Build candidate in LOCAL time — Date constructor auto-converts to UTC internally
+  const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntil, localHour, localMin, 0);
   // If it's in the past, add 7 days
-  if (candidate.getTime() <= now.getTime()) candidate.setUTCDate(candidate.getUTCDate() + 7);
+  if (candidate.getTime() <= now.getTime()) candidate.setDate(candidate.getDate() + 7);
   const startUnix = Math.floor(candidate.getTime() / 1000);
   const endUnix = startUnix + (duration || 30) * 60;
-  // Reset offset: hours after Thursday 0 UTC
-  const totalMins = ((utcDay - 3 + 7) % 7) * 24 * 60 + utcHour * 60 + utcMin;
-  const rd = Math.floor(totalMins / (24 * 60)), rh = Math.floor((totalMins % (24 * 60)) / 60), rm = totalMins % 60;
+  // Reset offset: Thursday 0:00 UTC is the weekly reset
+  // Find the most recent Thursday 0 UTC before/at this run
+  const resetThursday = new Date(Date.UTC(candidate.getUTCFullYear(), candidate.getUTCMonth(), candidate.getUTCDate()));
+  const utcDow = resetThursday.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceThurs = ((utcDow - 4) + 7) % 7; // 4=Thursday
+  resetThursday.setUTCDate(resetThursday.getUTCDate() - daysSinceThurs);
+  const resetUnix = Math.floor(resetThursday.getTime() / 1000);
+  const diffMins = Math.floor((startUnix - resetUnix) / 60);
+  const rd = Math.floor(diffMins / (24 * 60)), rh = Math.floor((diffMins % (24 * 60)) / 60), rm = diffMins % 60;
   const resetLabel = "Reset +" + (rd > 0 ? `${rd}d ` : "") + (rh > 0 || rd > 0 ? `${rh}h` : "") + (rm > 0 ? `${rm}m` : rh === 0 && rd === 0 ? "0" : "");
-  // Local day name
-  const localDay = candidate.toLocaleDateString("en-US", { weekday: "long" });
-  return { startUnix, endUnix, resetLabel, localDay };
+  // Local day name for display
+  const localDayName = candidate.toLocaleDateString("en-US", { weekday: "long" });
+  return { startUnix, endUnix, resetLabel, localDay: localDayName };
 }
 
 /* ═══ API ═══ */
