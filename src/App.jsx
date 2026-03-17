@@ -590,8 +590,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
-    displayList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); else m.unscheduled.push(p); });
-    // Parties (2+ members) always above solos (1 member)
+    partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); });
+    displayList.forEach(p => { if (p.utcDay == null) m.unscheduled.push(p); });
     m.unscheduled.sort((a, b) => {
       const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
       const bSolo = (b.members?.length || 0) <= 1 ? 1 : 0;
@@ -599,7 +599,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     });
     for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
     return m;
-  }, [displayList]);
+  }, [partyList, displayList]);
 
   const visRange = useMemo(() => {
     // Full grid when editing or expanded
@@ -934,8 +934,11 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   const chars = allChars.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
 
   if (allChars.length === 0) return <div style={{ ...BACKDROP, textAlign: "center", padding: "60px 20px" }}><div style={{ fontSize: 15, fontWeight: 500, fontFamily: "'Comfortaa',sans-serif", color: "#94a3b8" }}>No characters registered</div><div style={{ fontSize: 13, marginTop: 6, color: "#64748b" }}>Go to Profile Settings to add your IGNs</div></div>;
-  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
-  const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && p.bosses?.some(b => b.bossName === bn));
+  // Find party for THIS user's character — matches by userId AND charName
+  const uid = user.id;
+  const uname = user.username;
+  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => (m.userId === uid || m.userId === uname) && m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
+  const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && (p.leaderId === uid || p.leaderId === uname) && p.bosses?.some(b => b.bossName === bn));
 
   const eBtn = { width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "transform .1s" };
   const sBtnBase = { width: 22, height: 14, borderRadius: 4, border: "none", cursor: "pointer", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .1s", lineHeight: 1 };
@@ -945,13 +948,13 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
       {/* Pagination */}
       {totalPages > 1 && (
         <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1 }}>← Prev</button>
+          <button onClick={() => page > 0 && setPage(page - 1)}
+            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1, cursor: page === 0 ? "default" : "pointer", pointerEvents: page === 0 ? "none" : "auto" }}>← Prev</button>
           <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
-            Page {page + 1} of {totalPages} ({allChars.length} characters)
+            Page {page + 1} of {totalPages} ({allChars.length} chars)
           </span>
-          <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1 }}>Next →</button>
+          <button onClick={() => page < totalPages - 1 && setPage(page + 1)}
+            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1, cursor: page >= totalPages - 1 ? "default" : "pointer", pointerEvents: page >= totalPages - 1 ? "none" : "auto" }}>Next →</button>
         </div>
       )}
       <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
@@ -1096,12 +1099,11 @@ export default function App() {
   };
   const handleSkipBoss = async (bossName, charName, undoSkip) => {
     if (undoSkip) {
-      // Remove the skip entry
-      const skipId = Object.keys(parties).find(id => parties[id].skipped && parties[id]._skipChar?.toLowerCase() === charName.toLowerCase() && parties[id].bosses?.some(b => b.bossName === bossName));
+      const skipId = Object.keys(parties).find(id => parties[id].skipped && parties[id]._skipChar?.toLowerCase() === charName.toLowerCase() && (parties[id].leaderId === user.id || parties[id].leaderId === user.username) && parties[id].bosses?.some(b => b.bossName === bossName));
       if (skipId) { const np = { ...parties }; delete np[skipId]; await save(np); }
     } else {
       const skipEntry = {
-        id: `skip_${Date.now().toString(36)}`, skipped: true, _skipChar: charName,
+        id: `skip_${Date.now().toString(36)}`, skipped: true, _skipChar: charName, _skipUser: user.id,
         bosses: [{ id: "b0", bossName, difficulty: "" }],
         members: [], leaderId: user.id,
       };
