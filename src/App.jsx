@@ -36,6 +36,7 @@ const DAY_ORDER = Array.from({ length: 7 }, (_, i) => (_resetLocalDay + i) % 7);
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Toronto", "America/Vancouver", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Australia/Sydney", "America/Sao_Paulo", "America/Mexico_City", "UTC"];
 function getMaxParty(b, d) { if (b === "Lotus" && d === "Extreme") return 2; if (["Adversary", "Limbo", "Baldrix"].includes(b)) return 3; return 6; }
 function getDropsForBoss(b, d) { return (BOSS_DROPS[b] || []).filter(x => x.diffs === null || x.diffs.includes(d)); }
+const DROP_ABBR = { "Total Control": "TC", "Berserked": "Zerk", "Pitched Boss": "Pitched", "Genesis Badge": "Badge", "Enhancement Hammer": "Hammer", "Mitra's Rage": "Emblem", "Grindstone of Life": "GS 4→5", "Immortal Legacy": "Medal", "Grindstone of Faith": "GS 5→6", "Whisper of the Source": "Whisper", "Oath of Death": "Oath" };
 const offsetMin = new Date().getTimezoneOffset();
 const RESET_SLOT = ((Math.round(-offsetMin / 30) % 48) + 48) % 48;
 
@@ -429,7 +430,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                       if (!pd.method) return null;
                       return (
                         <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 4px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
-                          <span style={{ fontSize: 8, color: "#475569", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{drop.name}</span>
+                          <span style={{ fontSize: 8, color: "#475569", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
                           {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "1px 6px", borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 9, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
                           {pd.method === "priority" && (isLead ? (
                             <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 10, padding: "1px 3px", paddingRight: 3, width: 32, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 3, appearance: "none", WebkitAppearance: "none" }}>
