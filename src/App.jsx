@@ -379,20 +379,22 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
-  const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); };
+  const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (!settingTime && pos) setHoverCell(pos); };
+  const [hoverCell, setHoverCell] = useState(null);
+  const [hoverCellPos, setHoverCellPos] = useState(null);
   const getCellInfo = (day, slot) => {
-    let ac = 0;
+    let ac = 0; const unavail = []; const conflicts = [];
     memberUsers.forEach(m => {
       const hasAny = Object.keys(m.availability).length > 0;
       if (!hasAny || m.availability[`${day}-${slot}`] === "available") ac++;
+      else unavail.push(m.charName);
     });
-    let bc = 0;
     memberUsers.forEach(m => {
       (otherParties[m.userId] || []).forEach(op => {
-        if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) bc++; }
+        if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) conflicts.push({ name: m.charName, boss: op.bosses?.[0]?.bossName }); }
       });
     });
-    return { ac, tot: memberUsers.length, bc };
+    return { ac, tot: memberUsers.length, bc: conflicts.length, unavail, conflicts };
   };
   const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); const mn = Math.min(timeAnchor.slot, timeHover.slot); const mx = Math.max(timeAnchor.slot, timeHover.slot); const capped = Math.min(mx, mn + 3); for (let i = mn; i <= capped; i++) s.add(`${timeAnchor.day}-${i}`); return s; };
   const timePrev = settingTime ? getTimePrev() : new Set();
@@ -575,7 +577,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
         {/* Hover time tooltip */}
         {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", height: "calc(100vh - 140px)", minHeight: 500 }}
-          onClick={onGridClick} onMouseMove={onGridMove} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); }}>
+          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) setHoverCellPos({ left: e.clientX + 14, top: e.clientY - 10 }); }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
           <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
             {/* Header */}
             <div style={{ height: 22 }} />
@@ -617,6 +619,25 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.22)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
           <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,146,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
+        {/* Cell hover tooltip */}
+        {hoverCell && hoverCellPos && !settingTime && (() => {
+          const info = getCellInfo(hoverCell.day, hoverCell.slot);
+          if (info.ac === info.tot && info.bc === 0) return null;
+          return <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...hoverCellPos }}>
+            <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 8, padding: "8px 10px", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 140, maxWidth: 220 }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverCell.day]} {slotToTime(hoverCell.slot)}</div>
+              {info.unavail.length > 0 && <div style={{ marginBottom: 3 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#f87171", fontFamily: "'Comfortaa',sans-serif" }}>Unavailable: </span>
+                <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.unavail.join(", ")}</span>
+              </div>}
+              {info.conflicts.length > 0 && <div>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#fb923c", fontFamily: "'Comfortaa',sans-serif" }}>Conflict: </span>
+                <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.conflicts.map(c => `${c.name} (${c.boss})`).join(", ")}</span>
+              </div>}
+              {info.ac > 0 && info.ac < info.tot && <div style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{info.ac}/{info.tot} available</div>}
+            </div>
+          </div>;
+        })()}
       </div>
     </div>
   );
