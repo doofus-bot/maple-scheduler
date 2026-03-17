@@ -436,7 +436,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               const isMe = m.userId === currentUser?.id;
               const myChars = currentUser?.characters || [];
               // Look up this member's registered characters from allUsers
-              const memberUser = allUsers.find(u => u.id === m.userId);
+              const memberUser = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
               const memberChars = memberUser?.characters || [];
               const canEditSelf = isMe && myChars.length > 1;
               const canEditAsLead = isLead && editMembers && !isMe;
@@ -537,14 +537,14 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
                   const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
                   const isHov = settingTime && hoverTime && hoverTime.day === di && (hoverTime.slot === slot || hoverTime.slot === slot + 1);
-                  let bg = "rgba(20,24,41,.8)"; // dark base instead of transparent
+                  let bg = "rgba(20,24,41,.8)";
                   if (isSch) bg = "rgba(37,99,235,.5)";
                   else if (isPr) bg = "rgba(37,99,235,.35)";
                   else if (isHov) bg = "rgba(37,99,235,.2)";
-                  else if (info.bc > 0) bg = "rgba(251,191,36,.35)";
-                  else if (info.ac === 0) bg = "rgba(239,68,68,.25)";
-                  else if (info.ac === info.tot) bg = "rgba(34,197,94,.35)";
-                  else if (info.ac > 0) bg = "rgba(34,197,94,.18)";
+                  else if (info.bc > 0) bg = "rgba(251,146,36,.35)"; // conflict — orange
+                  else if (info.ac === info.tot && info.tot > 0) bg = "rgba(34,197,94,.35)"; // ALL available — green
+                  else if (info.ac > 0) bg = "rgba(251,191,36,.18)"; // SOME unavailable — amber
+                  else bg = "rgba(239,68,68,.22)"; // NONE available — red
                   const is4hr = h > 0 && h % 4 === 0;
                   return <div key={`${h}-${di}`} style={{ minHeight: 20, borderTop: is4hr ? "1px solid rgba(255,255,255,.18)" : "1px solid rgba(30,36,64,.2)", borderLeft: "1px solid rgba(30,36,64,.12)", background: bg }} />;
                 }),
@@ -559,9 +559,10 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
         {/* Legend */}
         <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
           <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(37,99,235,.5)", marginRight: 3, verticalAlign: "middle" }} />Scheduled</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Available</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.25)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,191,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Free</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,191,36,.18)", marginRight: 3, verticalAlign: "middle" }} />Partial</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.22)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
+          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,146,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
       </div>
     </div>
