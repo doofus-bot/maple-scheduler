@@ -333,14 +333,41 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     setIgnPopup(null);
   };
 
-  const memberUsers = useMemo(() => (party.members?.map(m => ({ ...m, availability: (allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username === m.userId))?.availability || {} })) || []), [party.members, allUsers]);
-  const otherParties = useMemo(() => { const allP = Object.values(allParties || {}); const map = {}; party.members?.forEach(m => { map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === m.userId)); }); return map; }, [allParties, party]);
+  // Resolve each member to their real Discord user — match by ID or username
+  const memberUsers = useMemo(() => (party.members?.map(m => {
+    const u = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
+    return { ...m, resolvedId: u?.id || m.userId, availability: u?.availability || {} };
+  }) || []), [party.members, allUsers]);
+
+  // Find other parties for each member using resolved Discord ID
+  const otherParties = useMemo(() => {
+    const allP = Object.values(allParties || {}).filter(p => !p.skipped);
+    const map = {};
+    memberUsers.forEach(m => {
+      const rid = m.resolvedId;
+      map[m.userId] = allP.filter(p => p.id !== party.id && p.utcDay != null && p.members?.some(pm => pm.userId === rid || pm.userId === m.userId));
+    });
+    return map;
+  }, [allParties, party, memberUsers]);
 
   const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); };
-  const getCellInfo = (day, slot) => { let ac = 0; memberUsers.forEach(m => { if (m.availability[`${day}-${slot}`] === "available") ac++; }); let bc = 0; party.members?.forEach(m => { (otherParties[m.userId] || []).forEach(op => { if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) bc++; } }); }); return { ac, tot: memberUsers.length, bc }; };
+  const getCellInfo = (day, slot) => {
+    let ac = 0;
+    memberUsers.forEach(m => {
+      const hasAny = Object.keys(m.availability).length > 0;
+      if (!hasAny || m.availability[`${day}-${slot}`] === "available") ac++;
+    });
+    let bc = 0;
+    memberUsers.forEach(m => {
+      (otherParties[m.userId] || []).forEach(op => {
+        if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) bc++; }
+      });
+    });
+    return { ac, tot: memberUsers.length, bc };
+  };
   const getTimePrev = () => { if (!timeAnchor || !timeHover || timeAnchor.day !== timeHover.day) return new Set(); const s = new Set(); const mn = Math.min(timeAnchor.slot, timeHover.slot); const mx = Math.max(timeAnchor.slot, timeHover.slot); const capped = Math.min(mx, mn + 3); for (let i = mn; i <= capped; i++) s.add(`${timeAnchor.day}-${i}`); return s; };
   const timePrev = settingTime ? getTimePrev() : new Set();
   const partySlots = useMemo(() => { if (party.utcDay == null) return new Set(); const s = new Set(); const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); for (let i = ss; i < ss + dur && i < 48; i++) s.add(`${party.utcDay}-${i}`); return s; }, [party.utcDay, party.utcHour, party.utcMin, party.duration]);
