@@ -577,7 +577,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
         {/* Hover time tooltip */}
         {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", height: "calc(100vh - 140px)", minHeight: 500 }}
-          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) setHoverCellPos({ left: e.clientX + 14, top: e.clientY - 10 }); }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
+          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const x = Math.min(e.clientX + 14, window.innerWidth - 240); const y = Math.min(e.clientY + 14, window.innerHeight - 100); setHoverCellPos({ left: x, top: y }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
           <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
             {/* Header */}
             <div style={{ height: 22 }} />
