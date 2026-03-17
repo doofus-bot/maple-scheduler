@@ -149,12 +149,12 @@ function IGNPopup({ title, hint, onConfirm, onClose }) {
   const [ign, setIgn] = useState(""); const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
   return (
-    <div style={S.popOverlay} onClick={() => onClose("TBD")}><div style={S.popBox} onClick={e => e.stopPropagation()}>
-      <div style={S.popHead}><span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{title}</span><button style={S.closeBtn} onClick={() => onClose("TBD")}>✕</button></div>
+    <div style={S.popOverlay} onClick={() => onClose()}><div style={S.popBox} onClick={e => e.stopPropagation()}>
+      <div style={S.popHead}><span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{title}</span><button style={S.closeBtn} onClick={() => onClose()}>✕</button></div>
       <div style={{ padding: "16px 20px" }}>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10, fontFamily: "'Comfortaa',sans-serif" }}>{hint}</div>
-        <input ref={ref} style={S.input} placeholder="e.g. xXSlayerXx" value={ign} onChange={e => setIgn(e.target.value)} onKeyDown={e => { if (e.key === "Enter") onConfirm(ign.trim() || "TBD"); if (e.key === "Escape") onClose("TBD"); }} />
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}><button style={S.btnGhost} onClick={() => onClose("TBD")}>Skip</button><button style={S.btnGreen} onClick={() => onConfirm(ign.trim() || "TBD")}>Confirm</button></div>
+        <input ref={ref} style={S.input} placeholder="e.g. xXSlayerXx" value={ign} onChange={e => setIgn(e.target.value)} onKeyDown={e => { if (e.key === "Enter") onConfirm(ign.trim() || "Temp"); if (e.key === "Escape") onClose(); }} />
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}><button style={S.btnGhost} onClick={() => onClose()}>Skip</button><button style={S.btnGreen} onClick={() => onConfirm(ign.trim() || "Temp")}>Confirm</button></div>
       </div>
     </div></div>
   );
@@ -186,11 +186,10 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
   // Update lead's charName when dropdown changes
   useEffect(() => { setMembers(prev => prev.map((m, i) => i === 0 ? { ...m, charName } : m)); }, [charName]);
 
-  const openIgnD = () => { const n = discordInput.trim(); if (!n || members.length >= maxP) return; setIgnPopup({ type: "discord", discordName: n }); };
+  const openIgnD = () => { const n = discordInput.trim(); if (!n || members.length >= maxP) return; setMembers(p => [...p, { userId: n, charName: n, isTemp: false }]); setDiscordInput(""); setTimeout(() => inputRef.current?.focus(), 50); };
   const openIgnT = () => { if (members.length >= maxP) return; setIgnPopup({ type: "temp" }); };
   const handleIgn = (ign) => {
-    if (ignPopup.type === "discord") { setMembers(p => [...p, { userId: ignPopup.discordName, charName: ign, isTemp: false }]); setDiscordInput(""); }
-    else setMembers(p => [...p, { userId: `temp_${Date.now()}`, charName: ign || "TBD", isTemp: true }]);
+    setMembers(p => [...p, { userId: `temp_${Date.now()}`, charName: ign || "Temp", isTemp: true }]);
     setIgnPopup(null); setTimeout(() => inputRef.current?.focus(), 50);
   };
   const rmMember = i => setMembers(p => p.filter((_, j) => j !== i));
@@ -248,7 +247,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
         </div>
       </div>
     </div>
-    {ignPopup && <IGNPopup title={ignPopup.type === "discord" ? `IGN for ${ignPopup.discordName}` : "Temp Character Name"} hint={ignPopup.type === "discord" ? "In-game character name? Skip for TBD." : "Character name for temp member."} onConfirm={handleIgn} onClose={handleIgn} />}
+    {ignPopup && <IGNPopup title="Temp Character Name" hint="Character name for temp member." onConfirm={handleIgn} onClose={() => setIgnPopup(null)} />}
     </div>
   );
 }
@@ -288,17 +287,21 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     if (idx >= 0) removeMember(idx);
     onBack();
   };
-  const addMemberByDiscord = (ign) => {
+  const addMemberByDiscord = () => {
     const name = addDiscord.trim();
     if (!name || party.members.length >= maxP) return;
-    const nm = [...party.members, { userId: name, charName: ign || "TBD", isTemp: false }];
+    // Look up if this user exists and has characters
+    const matchedUser = allUsers.find(u => u.username?.toLowerCase() === name.toLowerCase());
+    const charName = matchedUser?.characters?.[0] || name;
+    const userId = matchedUser?.id || name;
+    const nm = [...party.members, { userId, charName, isTemp: false }];
     onUpdate({ ...party, members: nm });
-    setAddDiscord(""); setIgnPopup(null);
+    setAddDiscord("");
     setTimeout(() => addRef.current?.focus(), 50);
   };
   const addTemp = (ign) => {
     if (party.members.length >= maxP) return;
-    const nm = [...party.members, { userId: `temp_${Date.now()}`, charName: ign || "TBD", isTemp: true }];
+    const nm = [...party.members, { userId: `temp_${Date.now()}`, charName: ign || "Temp", isTemp: true }];
     onUpdate({ ...party, members: nm });
     setIgnPopup(null);
   };
@@ -328,7 +331,20 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <button style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 11 }} onClick={onBack}>←</button>
             <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
+            {settingTime && isLead ? (
+              <select value={boss?.difficulty || ""} onChange={e => {
+                const newDiff = e.target.value;
+                const newDrops = getDropsForBoss(boss.bossName, newDiff);
+                const newMaxP = getMaxParty(boss.bossName, newDiff);
+                onUpdate({ ...party, bosses: [{ ...boss, difficulty: newDiff }], maxMembers: newMaxP,
+                  drops: newDrops.map((d, i) => party.drops?.find(x => x.itemName === d.name) || { id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })
+                });
+              }} style={{ ...S.select, fontSize: 10, padding: "3px 8px", paddingRight: 20, borderRadius: 8, backgroundPosition: "right 4px center", fontWeight: 700, color: diffColor, background: `${diffColor}15`, borderColor: `${diffColor}44` }}>
+                {BOSSES.find(b => b.name === boss?.bossName)?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
+            )}
           </div>
           {party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
@@ -390,8 +406,13 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
           {/* Character cards — 2 per row */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
             {party.members?.map((m, i) => {
-              const isMe = m.userId === currentUser?.id || m.userId === currentUser?.username;
+              const isMe = m.userId === currentUser?.id;
               const myChars = currentUser?.characters || [];
+              // Look up this member's registered characters from allUsers
+              const memberUser = allUsers.find(u => u.id === m.userId);
+              const memberChars = memberUser?.characters || [];
+              const canEdit = isMe || (isLead && editMembers);
+              const availChars = isMe ? myChars : memberChars;
               const switchChar = (newName) => { onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) }); };
               return (
                 <div key={i} style={{ padding: "10px 8px", borderRadius: 10, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
@@ -404,11 +425,11 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
                   )}
                   {/* Avatar */}
                   <CharAvatar name={m.charName} size={44} />
-                  {/* IGN */}
-                  {isMe && myChars.length > 1 ? (
+                  {/* IGN — editable by self or lead */}
+                  {canEdit && availChars.length > 1 ? (
                     <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 10, padding: "2px 4px", paddingRight: 16, width: "100%", backgroundPosition: "right 2px center", borderRadius: 5, textAlign: "center" }}>
-                      {myChars.map(c => <option key={c} value={c}>{c}</option>)}
-                      {!myChars.includes(m.charName) && <option value={m.charName}>{m.charName}</option>}
+                      {availChars.map(c => <option key={c} value={c}>{c}</option>)}
+                      {!availChars.includes(m.charName) && <option value={m.charName}>{m.charName}</option>}
                     </select>
                   ) : (
                     <span style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{m.charName}</span>
@@ -456,14 +477,14 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
             <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid rgba(30,36,64,.3)" }}>
               <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
               <div style={{ display: "flex", gap: 4 }}>
-                <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) setIgnPopup({ type: "discord" }); }} />
-                <button onClick={() => addDiscord.trim() && setIgnPopup({ type: "discord" })} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
+                <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) addMemberByDiscord(); }} />
+                <button onClick={() => addDiscord.trim() && addMemberByDiscord()} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
               </div>
               <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "4px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
             </div>
           )}
         </div>
-        {ignPopup && <IGNPopup title={ignPopup.type === "discord" ? `IGN for ${addDiscord}` : "Temp Character Name"} hint={ignPopup.type === "discord" ? "In-game character name for this player." : "Name for temp slot."} onConfirm={ign => ignPopup.type === "discord" ? addMemberByDiscord(ign) : addTemp(ign)} onClose={() => setIgnPopup(null)} />}
+        {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
       </div>
 
       {/* ── RIGHT PANEL — Schedule Grid ── */}
