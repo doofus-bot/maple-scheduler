@@ -333,11 +333,37 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     setIgnPopup(null);
   };
 
+  // Convert availability from one timezone to another
+  const convertAvail = useCallback((avail, fromTZ) => {
+    if (!fromTZ || !avail || Object.keys(avail).length === 0) return avail;
+    const viewerTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (fromTZ === viewerTZ) return avail;
+    // Compute offset difference in 30-min slots
+    const now = new Date();
+    const fromTime = new Date(now.toLocaleString("en-US", { timeZone: fromTZ }));
+    const viewerTime = new Date(now.toLocaleString("en-US", { timeZone: viewerTZ }));
+    const diffSlots = Math.round((viewerTime - fromTime) / (30 * 60 * 1000));
+    if (diffSlots === 0) return avail;
+    const converted = {};
+    for (const key of Object.keys(avail)) {
+      if (avail[key] !== "available") continue;
+      const [d, s] = key.split("-").map(Number);
+      let ns = s + diffSlots, nd = d;
+      while (ns >= 48) { ns -= 48; nd = (nd + 1) % 7; }
+      while (ns < 0) { ns += 48; nd = (nd - 1 + 7) % 7; }
+      converted[`${nd}-${ns}`] = "available";
+    }
+    return converted;
+  }, []);
+
   // Resolve each member to their real Discord user — match by ID or username
+  // Convert their availability from their timezone to the viewer's timezone
   const memberUsers = useMemo(() => (party.members?.map(m => {
     const u = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
-    return { ...m, resolvedId: u?.id || m.userId, availability: u?.availability || {} };
-  }) || []), [party.members, allUsers]);
+    const rawAvail = u?.availability || {};
+    const memberTZ = u?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return { ...m, resolvedId: u?.id || m.userId, availability: convertAvail(rawAvail, memberTZ) };
+  }) || []), [party.members, allUsers, convertAvail]);
 
   // Find other parties for each member using resolved Discord ID
   const otherParties = useMemo(() => {
