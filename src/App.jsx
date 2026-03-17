@@ -584,7 +584,7 @@ function ProfileModal({ user, onClose, onSave }) {
 
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
-  const partyList = Object.values(parties || {}).filter(p => !p.skipped);
+  const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id || m.userId === user.username));
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -939,7 +939,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 }
 /* ═══ CHARACTERS VIEW ═══ */
 function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss }) {
-  const pl = Object.values(parties || {}); const allChars = (user.characters || []).slice(0, 12);
+  const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id || m.userId === user.username) || (p.skipped && (p.leaderId === user.id || p.leaderId === user.username)));
+  const allChars = (user.characters || []).slice(0, 12);
   const [page, setPage] = useState(0);
   const PER_PAGE = 6;
   const totalPages = Math.ceil(allChars.length / PER_PAGE);
