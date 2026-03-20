@@ -413,9 +413,18 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
   const timePrev = settingTime ? getTimePrev() : new Set();
   const partySlots = useMemo(() => { if (party.utcDay == null) return new Set(); const s = new Set(); const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); for (let i = ss; i < ss + dur && i < 48; i++) s.add(`${party.utcDay}-${i}`); return s; }, [party.utcDay, party.utcHour, party.utcMin, party.duration]);
 
-  const updateDrop = (dropId, field, value) => { onUpdate({ ...party, drops: (party.drops || []).map(d => d.id === dropId ? { ...d, [field]: value } : d) }); };
-  const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId); if (!dr) return; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
-  const setPrioFn = (dropId, userId, pos) => { const dr = party.drops?.find(d => d.id === dropId); if (!dr) return; let p = [...(dr.priority || [])].filter(x => x !== userId); if (pos > 0) p.splice(pos - 1, 0, userId); updateDrop(dropId, "priority", p); };
+  const updateDrop = (dropId, field, value) => {
+    let pdrops = [...(party.drops || [])];
+    // If this drop doesn't exist yet, create it
+    if (!pdrops.find(d => d.id === dropId)) {
+      const dropDef = drops.find((_, i) => `d${i}` === dropId);
+      if (dropDef) pdrops.push({ id: dropId, bossId: "b0", itemName: dropDef.name, method: null, eligible: [], priority: [] });
+    }
+    pdrops = pdrops.map(d => d.id === dropId ? { ...d, [field]: value } : d);
+    onUpdate({ ...party, drops: pdrops });
+  };
+  const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId) || { eligible: [] }; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
+  const setPrioFn = (dropId, userId, pos) => { const dr = party.drops?.find(d => d.id === dropId) || { priority: [] }; let p = [...(dr.priority || [])].filter(x => x !== userId); if (pos > 0) p.splice(pos - 1, 0, userId); updateDrop(dropId, "priority", p); };
 
   return (
     <div style={{ display: "flex", gap: 16, minHeight: "calc(100vh - 94px)", alignItems: "flex-start" }}>
