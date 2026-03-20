@@ -42,6 +42,8 @@ db.exec(`
 
 // Migration — add settings column if missing
 try { db.prepare("ALTER TABLE users ADD COLUMN settings TEXT DEFAULT '{}'").run(); } catch {}
+// Migration — add share_token column
+try { db.prepare("ALTER TABLE users ADD COLUMN share_token TEXT").run(); } catch {}
 
 /* ════════════════════════════════════════
    MIDDLEWARE
@@ -142,6 +144,30 @@ app.get("/auth/discord/callback", async (req, res) => {
       db.prepare("UPDATE users SET username = ?, avatar = ? WHERE id = ?").run(d.username, avatarUrl, d.id);
     }
     req.session.userId = d.id;
+
+    // Migrate party members: if someone was added by Discord username, link to their real ID
+    try {
+      const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
+      if (row?.data) {
+        const parties = JSON.parse(row.data);
+        let changed = false;
+        for (const pid of Object.keys(parties)) {
+          const p = parties[pid];
+          if (p.members) {
+            p.members = p.members.map(m => {
+              if (m.userId === d.username && m.userId !== d.id) {
+                changed = true;
+                return { ...m, userId: d.id };
+              }
+              return m;
+            });
+            if (p.leaderId === d.username) { p.leaderId = d.id; changed = true; }
+          }
+        }
+        if (changed) db.prepare("UPDATE parties_store SET data = ? WHERE id = 1").run(JSON.stringify(parties));
+      }
+    } catch (migErr) { console.error("Member migration error:", migErr); }
+
     res.redirect("/");
   } catch (err) {
     console.error("OAuth error:", err);
@@ -168,7 +194,7 @@ function requireAuth(req, res, next) {
 app.get("/api/me", requireAuth, (req, res) => {
   const u = req.user;
   const settings = JSON.parse(u.settings || "{}");
-  res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
+  res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
     characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
@@ -184,7 +210,7 @@ app.patch("/api/me", requireAuth, (req, res) => {
   }
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const settings = JSON.parse(u.settings || "{}");
-  res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone,
+  res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
     characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
@@ -207,6 +233,50 @@ app.put("/api/parties", requireAuth, (req, res) => {
 });
 
 /* ════════════════════════════════════════
+   API: SHARE LINK
+   ════════════════════════════════════════ */
+// Generate or get share token
+app.post("/api/me/share", requireAuth, (req, res) => {
+  let user = db.prepare("SELECT share_token FROM users WHERE id = ?").get(req.user.id);
+  if (!user.share_token) {
+    const token = require("crypto").randomBytes(8).toString("hex");
+    db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
+    user = { share_token: token };
+  }
+  res.json({ token: user.share_token });
+});
+
+// Regenerate share token
+app.post("/api/me/share/regenerate", requireAuth, (req, res) => {
+  const token = require("crypto").randomBytes(8).toString("hex");
+  db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
+  res.json({ token });
+});
+
+// Public share endpoint — no auth required
+app.get("/api/share/:token", (req, res) => {
+  const user = db.prepare("SELECT id, username, avatar, timezone, characters, availability, share_token FROM users WHERE share_token = ?").get(req.params.token);
+  if (!user) return res.status(404).json({ error: "Not found" });
+  // Get parties where this user is a member
+  const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
+  const allParties = JSON.parse(row?.data || "{}");
+  const myParties = {};
+  for (const [id, p] of Object.entries(allParties)) {
+    if (p.members?.some(m => m.userId === user.id || m.userId === user.username)) {
+      myParties[id] = p;
+    }
+  }
+  // Get all users for member resolution (limited fields)
+  const allUsers = db.prepare("SELECT id, username, avatar, timezone, characters, availability FROM users").all()
+    .map(u => ({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}") }));
+  res.json({
+    owner: { username: user.username, avatar: user.avatar, timezone: user.timezone, characters: JSON.parse(user.characters || "[]") },
+    parties: myParties,
+    users: allUsers,
+  });
+});
+
+/* ════════════════════════════════════════
    API: NEXON CHARACTER LOOKUP
    ════════════════════════════════════════ */
 app.get("/api/nexon/:name", async (req, res) => {
@@ -218,13 +288,13 @@ app.get("/api/nexon/:name", async (req, res) => {
       const data = await r.json();
       if (data.ranks?.length > 0) {
         const match = data.ranks.find(r => r.characterName.toLowerCase() === name.toLowerCase());
-        if (match) return res.json({ imgUrl: match.characterImgURL, jobName: match.jobName, characterName: match.characterName });
+        if (match) return res.json({ imgUrl: match.characterImgURL, jobName: match.jobName, level: match.characterLevel || match.level, characterName: match.characterName });
       }
     }
-    res.json({ imgUrl: null, jobName: null, characterName: name });
+    res.json({ imgUrl: null, jobName: null, level: null, characterName: name });
   } catch (err) {
     console.error("Nexon API error:", err);
-    res.json({ imgUrl: null, jobName: null, characterName: name });
+    res.json({ imgUrl: null, jobName: null, level: null, characterName: name });
   }
 });
 
