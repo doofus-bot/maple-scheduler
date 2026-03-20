@@ -1060,6 +1060,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
                   const startTime = fmtSlot(startS);
                   const leadChar = p.members?.[0]?.charName;
+                  const mc = p.members?.length || 1;
+                  const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : mc === 5 ? "5-man" : "6-man";
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)}
@@ -1069,21 +1071,27 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       style={{
                       position: "absolute", top: visTop + 1, left: 3, right: 3,
                       height: durS * ROW_H - 2, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "4px 8px", overflow: "hidden",
+                      padding: "3px 6px", overflow: "hidden",
                       background: solo ? "rgba(160,70,70,.85)" : `rgba(20,24,41,.9)`,
                       border: `2px solid ${solo ? "#c45c5c" : dc}`,
                       boxShadow: `0 0 8px ${dc}44, inset 0 0 20px rgba(0,0,0,.3)`,
-                      fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", flexDirection: "column", justifyContent: "center", lineHeight: 1.3,
+                      fontFamily: "'Comfortaa',sans-serif",
+                      display: "flex", flexDirection: "column", justifyContent: "space-between",
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.4)` } : {}),
                     }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span>{solo ? "Solo" : b?.bossName}</span>
-                        {!solo && <span style={{ fontSize: 9, opacity: .7 }}>· {p.members?.length}p</span>}
-                        <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc, marginLeft: 2 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
-                        <span style={{ fontSize: 9, opacity: .5, marginLeft: "auto" }}>{startTime}</span>
+                      {/* Top row: Boss name + Diff | Party size */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
+                          <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        </div>
+                        <span style={{ fontSize: 8, color: solo ? "#fca5a5" : "#94a3b8", fontWeight: 600, flexShrink: 0, marginLeft: 4 }}>{sizeLabel}</span>
                       </div>
-                      <ScheduleBlockJob charName={leadChar} />
+                      {/* Bottom row: Class | Start time */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <ScheduleBlockJob charName={leadChar} />
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 600, flexShrink: 0 }}>{startTime}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -1375,6 +1383,8 @@ function ShareView({ token }) {
                   const startS = p._viewSlot;
                   const durS = Math.max(1, Math.ceil((p.duration || 30) / 30));
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                  const mc = p.members?.length || 1;
+                  const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : mc === 5 ? "5-man" : "6-man";
                   return (
                     <div key={p.id}
                       onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); }}
@@ -1383,19 +1393,24 @@ function ShareView({ token }) {
                       style={{
                       position: "absolute", top: startS * ROW_H + 1, left: 3, right: 3,
                       height: durS * ROW_H - 2, borderRadius: 6, zIndex: 3,
-                      padding: "4px 8px", overflow: "hidden", cursor: "default",
+                      padding: "3px 6px", overflow: "hidden", cursor: "default",
                       background: solo ? "rgba(160,70,70,.85)" : "rgba(20,24,41,.9)",
                       border: `2px solid ${solo ? "#c45c5c" : dc}`,
                       boxShadow: `0 0 8px ${dc}44, inset 0 0 20px rgba(0,0,0,.3)`,
-                      fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", flexDirection: "column", justifyContent: "center", lineHeight: 1.3,
+                      fontFamily: "'Comfortaa',sans-serif",
+                      display: "flex", flexDirection: "column", justifyContent: "space-between",
                     }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span>{solo ? "Solo" : b?.bossName}</span>
-                        {!solo && <span style={{ fontSize: 9, opacity: .7 }}>· {p.members?.length}p</span>}
-                        <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
+                          <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        </div>
+                        <span style={{ fontSize: 8, color: solo ? "#fca5a5" : "#94a3b8", fontWeight: 600, flexShrink: 0, marginLeft: 4 }}>{sizeLabel}</span>
                       </div>
-                      <div style={{ fontSize: 9, color: "rgba(255,255,255,.6)", fontWeight: 500 }}>{fmtSlot(startS)} – {fmtSlot(Math.min(startS + durS, 48))}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 500 }}>{p.members?.[0]?.charName || ""}</span>
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 600 }}>{fmtSlot(startS)}</span>
+                      </div>
                     </div>
                   );
                 })}
