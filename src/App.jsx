@@ -1173,10 +1173,10 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
                         onMouseLeave={() => setHoverParty(null)}
                         style={{ padding: "3px 8px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
-                          background: solo ? "rgba(34,197,94,.15)" : `${dc}20`,
-                          border: `1px solid ${solo ? "rgba(34,197,94,.35)" : dc + "44"}`,
-                          color: solo ? "#10b981" : dc }}>
-                        {solo ? "Solo" : `${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
+                          background: `${dc}20`,
+                          border: `1px solid ${solo ? "rgba(255,255,255,.4)" : dc + "44"}`,
+                          color: dc }}>
+                        {`${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
                       </button>;
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
