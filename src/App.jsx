@@ -797,12 +797,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const DAY_LABEL_W = 48;
   const ROW_H = 52;
   const COL_W = 76; // Fixed width per 30-min slot — ~12hrs visible on 1920px
-  const [nowSlot, setNowSlot] = useState(() => { const n = new Date(); return n.getHours() * 2 + (n.getMinutes() >= 30 ? 1 : 0); });
+  const [nowSlot, setNowSlot] = useState(() => { const n = new Date(); return n.getHours() * 2 + n.getMinutes() / 30; });
   const scrolledRef = useRef(false);
 
-  // Update current time line every 30 seconds
+  // Update current time line every 15 seconds
   useEffect(() => {
-    const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + (n.getMinutes() >= 30 ? 1 : 0) + n.getMinutes() % 30 / 30); }, 15000);
+    const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + n.getMinutes() / 30); }, 15000);
     return () => clearInterval(iv);
   }, []);
 
@@ -1054,7 +1054,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             </div>
           )}
           {/* Current time line */}
-          <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + nowSlot * COL_W, width: 0, borderLeft: "2px solid rgba(255,255,255,.7)", pointerEvents: "none", zIndex: 9, transition: "left 30s linear" }}>
+          <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + nowSlot * COL_W, width: 0, borderLeft: "2px solid rgba(255,255,255,.7)", pointerEvents: "none", zIndex: 9, transition: "left 15s linear" }}>
             <div style={{ position: "absolute", top: -4, left: -5, width: 8, height: 8, borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px rgba(255,255,255,.5)" }} />
           </div>
           </div>{/* close inner wrapper */}
