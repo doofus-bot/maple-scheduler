@@ -794,11 +794,18 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
-  const HEADER_H = 24;
   const SLOT_COUNT = 48;
-  const DAY_LABEL_W = 54;
-  const ROW_H = 56; // Each day row height
-  const COL_W = 28; // Each 30-min slot width
+  const DAY_LABEL_W = 48;
+  const ROW_H = 52;
+  const containerRef = useRef(null);
+  const [containerW, setContainerW] = useState(1200);
+  useEffect(() => {
+    const measure = () => { if (containerRef.current) setContainerW(containerRef.current.offsetWidth); };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const COL_W = Math.max(16, Math.floor((containerW - DAY_LABEL_W) / visSlots));
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
@@ -889,7 +896,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const rect = gridRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left + gridRef.current.scrollLeft;
     const y = e.clientY - rect.top;
-    const row = Math.floor((y - HEADER_H) / ROW_H);
+    const row = Math.floor((y - 20) / ROW_H);
     const slot = visRange.start + Math.floor((x - DAY_LABEL_W) / COL_W);
     if (row < 0 || row > 6 || slot < visRange.start || slot >= visRange.end) return null;
     return { day: DAY_ORDER[row], slot };
@@ -956,149 +963,70 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-      {/* ── LEFT COLUMN — Edit + Unscheduled + Deleted ── */}
-      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Edit controls */}
-        <div style={{ ...BACKDROP, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
-              style={{ fontSize: 12, padding: "5px 14px", borderRadius: 8, border: `1px solid ${editing ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: editing ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: editing ? ACCENT : "#94a3b8" }}>
-              {editing ? "✓ Done" : "✎ Edit Schedule"}
-            </button>
-            {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 11, padding: "4px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => setExpanded(!expanded)}
-                style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
-                {expanded ? "▾ Collapse" : "▸ Expand"}
-              </button>
-              <button onClick={toggleSolos}
-                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
-                {showSolos ? "👤 Solos" : "👤 Hidden"}
-              </button>
-            </div>
-            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>
-              {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)}
-            </span>
-          </div>
-          {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 6 }}>Drag parties to reschedule</div>}
+    <div ref={containerRef}>
+      {/* ── TOP BAR — Controls ── */}
+      <div style={{ ...BACKDROP, padding: "8px 12px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => { setEditing(!editing); if (editing) { setDragging(null); setDragPos(null); } }}
+            style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${editing ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: editing ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: editing ? ACCENT : "#94a3b8" }}>
+            {editing ? "✓ Done" : "✎ Edit"}
+          </button>
+          {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 10, padding: "4px 8px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
+          <button onClick={() => setExpanded(!expanded)}
+            style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
+            {expanded ? "▾ Collapse" : "▸ Expand"}
+          </button>
+          <button onClick={toggleSolos}
+            style={{ fontSize: 10, padding: "4px 8px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
+            {showSolos ? "👤 Solos" : "👤 Hidden"}
+          </button>
         </div>
-
-        {/* Unscheduled — drop zone in edit mode */}
-        <div style={{ ...BACKDROP, padding: 12, ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
-          onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
-          onDrop={editing ? (e) => { e.preventDefault(); if (dragging && dragging.utcDay != null) { setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]); onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null }); } setDragging(null); setDragPos(null); } : undefined}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Unscheduled</div>
-          {byDay.unscheduled.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {byDay.unscheduled.map(p => {
-                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1; const dur = p.duration || 30;
-                const charName = p.members?.[0]?.charName || "—";
-                return (
-                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined} style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                      <div onClick={() => !editing && onClickParty(p)}
-                        onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); } }}
-                        onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
-                        onMouseLeave={() => setHoverParty(null)}
-                        style={{ flex: 1, minWidth: 0, cursor: editing ? "grab" : "pointer" }}>
-                        <div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
-                          {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
-                        </div>
-                        <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{charName}{!solo && p.members?.length > 1 ? ` +${p.members.length - 1}` : ""}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-                        <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 30, textAlign: "center" }}>{dur}m</span>
-                        <button onClick={() => changeDuration(p, 15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : editing ? (
-            <div style={{ padding: "16px 0", textAlign: "center", fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop here to unschedule</div>
-          ) : (
-            <div style={{ fontSize: 11, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>None</div>
-          )}
-        </div>
-
-        {/* Recently Deleted */}
-        {Object.keys(trash || {}).length > 0 && (
-          <div style={{ ...BACKDROP, padding: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Recently Deleted</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {Object.values(trash).map(p => {
-                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
-                const preTime = p._preDeleteDay != null ? `${DAYS_SHORT[p._preDeleteDay]} ${String(p._preDeleteHour).padStart(2, "0")}:${String(p._preDeleteMin).padStart(2, "0")}` : "—";
-                return (
-                  <div key={p.id} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.02)", border: "1px dashed rgba(239,68,68,.15)", opacity: 0.7 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
-                    </div>
-                    <div style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Was: {preTime}</div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => onRecover(p.id)} style={{ padding: "3px 10px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
-                      <button onClick={() => onPermDelete(p.id)} style={{ padding: "3px 8px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 10, fontFamily: "'Comfortaa',sans-serif" }}>✕</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>
+          {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)} · {visSlots / 2}hrs
+        </span>
       </div>
 
-      {/* ── RIGHT — Schedule Grid (horizontal: hours = columns, days = rows) ── */}
-      <div style={{ ...BACKDROP, padding: "12px 12px 12px 0", position: "relative", flex: 1, minWidth: 0 }}>
-        <div ref={gridRef} style={{ position: "relative", overflow: "auto" }}
+      {/* ── GRID — Full width ── */}
+      <div style={{ ...BACKDROP, padding: "0 0 4px 0", position: "relative" }}>
+        <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
           {/* Hour labels across top */}
-          <div style={{ display: "flex", marginLeft: 54, height: 24, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
+          <div style={{ display: "flex", marginLeft: DAY_LABEL_W, height: 20 }}>
             {Array.from({ length: visSlots }, (_, vi) => {
               const si = visRange.start + vi;
-              if (si % 2 !== 0) return <div key={vi} style={{ width: COL_W, flexShrink: 0 }} />;
+              if (si % 2 !== 0) return null;
               const h = Math.floor(si / 2);
-              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 9, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "24px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px" }}>
                 {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
               </div>;
-            }).filter(Boolean)}
+            })}
           </div>
           {/* Day rows */}
           {DAY_ORDER.map(dayIdx => (
-            <div key={dayIdx} style={{ display: "flex", position: "relative", height: ROW_H, borderBottom: "1px solid rgba(30,36,64,.25)" }}>
-              {/* Day label */}
-              <div style={{ width: 54, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", position: "sticky", left: 0, zIndex: 5, background: "rgba(11,14,26,.95)" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{DAYS_SHORT[dayIdx]}</span>
-                <span style={{ fontSize: 9, color: "#64748b" }}>{byDay[dayIdx]?.length || 0}</span>
+            <div key={dayIdx} style={{ display: "flex", position: "relative", height: ROW_H, borderTop: "1px solid rgba(30,36,64,.25)" }}>
+              <div style={{ width: DAY_LABEL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: "rgba(11,14,26,.6)" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{DAYS_SHORT[dayIdx]}</span>
+                <span style={{ fontSize: 8, color: "#64748b" }}>{byDay[dayIdx]?.length || 0}</span>
               </div>
-              {/* Time cells + party blocks */}
-              <div style={{ position: "relative", display: "flex", flex: 1, minWidth: visSlots * COL_W }}>
-                {/* Background cells */}
+              <div style={{ position: "relative", display: "flex", flex: 1 }}>
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
                   const hasA = isAvail(dayIdx, si);
                   const is4hr = si % 8 === 0 && si > 0;
                   return <div key={vi} style={{
                     width: COL_W, height: ROW_H, flexShrink: 0,
-                    background: hasA ? "rgba(34,197,94,.2)" : "rgba(20,24,41,.6)",
-                    borderRight: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.25)" : "1px solid rgba(30,36,64,.12)",
+                    background: hasA ? "rgba(34,197,94,.15)" : "rgba(20,24,41,.5)",
+                    borderRight: is4hr ? "1px solid rgba(255,255,255,.15)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.2)" : "1px solid rgba(30,36,64,.1)",
                   }} />;
                 })}
-                {/* Party blocks — positioned horizontally */}
                 {(byDay[dayIdx] || []).map(p => {
                   const startS = getStartSlot(p); const durS = getDurSlots(p);
                   if (startS + durS <= visRange.start || startS >= visRange.end) return null;
                   const visLeft = (startS - visRange.start) * COL_W;
+                  const blockW = durS * COL_W;
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
                   const mc = p.members?.length || 1;
-                  const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : mc === 5 ? "5-man" : "6-man";
+                  const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : `${mc}p`;
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)}
@@ -1106,49 +1034,99 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
                       onMouseLeave={() => setHoverParty(null)}
                       style={{
-                      position: "absolute", left: visLeft + 1, top: 3,
-                      width: durS * COL_W - 2, height: ROW_H - 6, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "2px 6px", overflow: "hidden",
-                      background: solo ? "rgba(160,70,70,.85)" : "rgba(20,24,41,.9)",
+                      position: "absolute", left: visLeft + 1, top: 2,
+                      width: blockW - 2, height: ROW_H - 4, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
+                      padding: "2px 5px", overflow: "hidden",
+                      background: solo ? "rgba(160,70,70,.85)" : "rgba(20,24,41,.92)",
                       border: `2px solid ${solo ? "#c45c5c" : dc}`,
-                      boxShadow: `0 0 6px ${dc}44, inset 0 0 12px rgba(0,0,0,.3)`,
+                      boxShadow: `0 0 6px ${dc}33`,
                       fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", alignItems: "center", gap: 6,
-                      ...(editing ? { outline: `1px dashed rgba(255,255,255,.4)` } : {}),
+                      display: "flex", flexDirection: "column", justifyContent: "space-between",
+                      ...(editing ? { outline: `1px dashed rgba(255,255,255,.3)` } : {}),
                     }}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
-                          <span style={{ fontSize: 7, fontWeight: 700, padding: "1px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
-                          <span style={{ fontSize: 7, color: "#94a3b8", flexShrink: 0 }}>{sizeLabel}</span>
-                        </div>
-                        <ScheduleBlockJob charName={p.members?.[0]?.charName} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
+                        <span style={{ fontSize: blockW > 80 ? 10 : 8, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
+                        <span style={{ fontSize: 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        {blockW > 70 && <span style={{ fontSize: 7, color: "#94a3b8", flexShrink: 0 }}>{sizeLabel}</span>}
                       </div>
+                      {blockW > 60 && <ScheduleBlockJob charName={p.members?.[0]?.charName} />}
                     </div>
                   );
                 })}
-                {/* Drag preview */}
                 {editing && dragPreview && dragPreview.day === dayIdx && (() => {
                   const visLeft = (dragPreview.startSlot - visRange.start) * COL_W;
-                  return <div style={{ position: "absolute", left: visLeft, top: 3, width: dragPreview.durSlots * COL_W, height: ROW_H - 6, borderRadius: 6, zIndex: 10, background: "rgba(37,99,235,.3)", border: `2px dashed ${ACCENT}`, boxShadow: `0 0 12px ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
-                    {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
+                  return <div style={{ position: "absolute", left: visLeft, top: 2, width: dragPreview.durSlots * COL_W, height: ROW_H - 4, borderRadius: 5, zIndex: 10, background: "rgba(37,99,235,.3)", border: `2px dashed ${ACCENT}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
+                    {dragging?.bosses?.[0]?.bossName}
                   </div>;
                 })()}
               </div>
             </div>
           ))}
-          {/* Reset line — vertical now */}
           {RESET_SLOT >= visRange.start && RESET_SLOT < visRange.end && (
-            <div style={{ position: "absolute", top: 24, bottom: 0, left: 54 + (RESET_SLOT - visRange.start) * COL_W, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
-              <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
+            <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + (RESET_SLOT - visRange.start) * COL_W, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
+              <span style={{ position: "absolute", top: -14, left: 4, fontSize: 7, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── BOTTOM — Unscheduled + Deleted ── */}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <div style={{ ...BACKDROP, padding: 10, flex: 1, ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
+          onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
+          onDrop={editing ? (e) => { e.preventDefault(); if (dragging && dragging.utcDay != null) { setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]); onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null }); } setDragging(null); setDragPos(null); } : undefined}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6, fontFamily: "'Fredoka',sans-serif" }}>Unscheduled</div>
+          {byDay.unscheduled.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {byDay.unscheduled.map(p => {
+                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const dur = p.duration || 30;
+                return (
+                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
+                    onClick={() => !editing && onClickParty(p)}
+                    onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); } }}
+                    onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
+                    onMouseLeave={() => setHoverParty(null)}
+                    style={{ padding: "5px 10px", borderRadius: 6, cursor: editing ? "grab" : "pointer", background: `${dc}10`, border: `1px solid ${dc}25`, userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: `${dc}22`, color: dc }}>{DIFF_ABBR[b?.difficulty]}</span>
+                    <span style={{ fontSize: 9, color: "#64748b" }}>{p.members?.[0]?.charName}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }} onClick={e => e.stopPropagation()}>
+                      <button onClick={() => changeDuration(p, -15)} style={{ width: 16, height: 16, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                      <span style={{ fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 24, textAlign: "center" }}>{dur}m</span>
+                      <button onClick={() => changeDuration(p, 15)} style={{ width: 16, height: 16, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : editing ? (
+            <div style={{ padding: "12px 0", textAlign: "center", fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop here to unschedule</div>
+          ) : (
+            <div style={{ fontSize: 10, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>None</div>
+          )}
+        </div>
+        {Object.keys(trash || {}).length > 0 && (
+          <div style={{ ...BACKDROP, padding: 10, minWidth: 200 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6, fontFamily: "'Fredoka',sans-serif" }}>Recently Deleted</div>
+            {Object.values(trash).map(p => {
+              const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+              return (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", opacity: 0.7 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
+                  <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                  <button onClick={() => onRecover(p.id)} style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 9, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
+                  <button onClick={() => onPermDelete(p.id)} style={{ padding: "2px 6px", borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 9 }}>✕</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
     </div>
   );
 }
+
 /* ═══ CHARACTERS VIEW ═══ */
 function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss }) {
   const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id) || (p.skipped && p.leaderId === user.id));
@@ -1554,27 +1532,36 @@ export default function App() {
   };
 
   const generateShare = async () => {
+    if (shareUrl) { setShowSharePopover(true); doCopy(shareUrl); return; }
     try {
-      const r = await fetch("/api/me/share", { method: "POST", credentials: "include" });
-      if (!r.ok) throw new Error("Failed");
+      const r = await fetch("/api/me/share", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       const url = `${window.location.origin}/share/${d.token}`;
       setShareUrl(url);
-      navigator.clipboard.writeText(url).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
-    } catch (e) { console.error("Share error:", e); }
+      setShowSharePopover(true);
+      doCopy(url);
+    } catch (e) { console.error("Share error:", e); alert("Failed to generate share link. Check console."); }
   };
   const regenerateShare = async () => {
     try {
-      const r = await fetch("/api/me/share/regenerate", { method: "POST", credentials: "include" });
-      if (!r.ok) throw new Error("Failed");
+      const r = await fetch("/api/me/share/regenerate", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       const url = `${window.location.origin}/share/${d.token}`;
       setShareUrl(url);
-      navigator.clipboard.writeText(url).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
+      doCopy(url);
     } catch (e) { console.error("Regenerate error:", e); }
   };
-  const copyShare = () => {
-    if (shareUrl) navigator.clipboard.writeText(shareUrl).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
+  const doCopy = (text) => {
+    try {
+      // Fallback: textarea method works everywhere
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy");
+      document.body.removeChild(ta);
+      setShareCopied(true); setTimeout(() => setShareCopied(false), 2000);
+    } catch { try { navigator.clipboard.writeText(text); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); } catch {} }
   };
 
   if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
@@ -1590,10 +1577,7 @@ export default function App() {
           <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
           <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
-          <button style={{ ...S.btnGhost, fontSize: 12, ...(shareCopied ? { color: "#10b981", borderColor: "rgba(34,197,94,.3)" } : {}) }} onClick={() => {
-            if (shareUrl) { copyShare(); } else { generateShare(); }
-          }}>{shareCopied ? "✓ Link Copied!" : "🔗 Share"}</button>
-          {shareUrl && <button style={{ ...S.btnGhost, fontSize: 9, padding: "4px 6px" }} onClick={() => setShowSharePopover(!showSharePopover)}>▼</button>}
+          <button style={{ ...S.btnGhost, fontSize: 12, ...(shareCopied ? { color: "#10b981", borderColor: "rgba(34,197,94,.3)" } : {}) }} onClick={generateShare}>{shareCopied ? "✓ Link Copied!" : "🔗 Share"}</button>
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
           <a href="/auth/logout" style={{ ...S.btnGhost, textDecoration: "none", fontSize: 12 }}>Logout</a>
         </div>
@@ -1602,7 +1586,7 @@ export default function App() {
           <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", marginBottom: 8 }}>Share Your Schedule</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             <input readOnly value={shareUrl} style={{ ...S.input, fontSize: 10, padding: "6px 8px", flex: 1 }} onClick={e => e.target.select()} />
-            <button onClick={copyShare} style={{ ...S.btnPrimary, fontSize: 10, padding: "6px 10px", whiteSpace: "nowrap" }}>{shareCopied ? "✓" : "Copy"}</button>
+            <button onClick={() => doCopy(shareUrl)} style={{ ...S.btnPrimary, fontSize: 10, padding: "6px 10px", whiteSpace: "nowrap" }}>{shareCopied ? "✓" : "Copy"}</button>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button onClick={regenerateShare} style={{ ...S.btnGhost, fontSize: 9, padding: "3px 8px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Regenerate Link</button>
@@ -1610,7 +1594,7 @@ export default function App() {
           </div>
         </div>}
       </div>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: view === "schedule" ? "none" : 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
         {view === "party" && selectedParty ? (
           <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
         ) : view === "characters" ? (
