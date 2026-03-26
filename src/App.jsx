@@ -1222,7 +1222,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
 
 /* ═══ LOGIN PAGE ═══ */
 function LoginPage() {
-  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
+  return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
     <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse at center,transparent 20%,rgba(0,0,0,.7) 100%)", pointerEvents: "none" }} />
     <div style={{ textAlign: "center", padding: 40, background: "rgba(20,24,41,.85)", border: "1px solid #1e2440", borderRadius: 20, backdropFilter: "blur(12px)", boxShadow: "0 24px 80px rgba(0,0,0,.4)", animation: "slideUp .3s ease", position: "relative", zIndex: 1 }}>
       <img src="/logo.png" alt="" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
@@ -1251,7 +1251,7 @@ function ShareView({ token }) {
     API.get("/api/me").then(d => { if (d) setMe(d); }).catch(() => {});
   }, [token]);
 
-  if (error) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
+  if (error) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
     <style>{globalCSS}</style>
     <div style={{ ...BACKDROP, padding: 40, textAlign: "center" }}>
       <div style={{ fontSize: 18, fontWeight: 700, color: "#f87171", fontFamily: "'Fredoka',sans-serif", marginBottom: 8 }}>Link not found</div>
@@ -1259,7 +1259,7 @@ function ShareView({ token }) {
       <a href="/" style={{ ...S.btnPrimary, display: "inline-block", marginTop: 16, textDecoration: "none" }}>Go Home</a>
     </div>
   </div>;
-  if (!data) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ color: "#64748b", animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
+  if (!data) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ color: "#64748b", animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
 
   const { owner, parties, users } = data;
   const partyList = Object.values(parties).filter(p => !p.skipped);
@@ -1322,7 +1322,7 @@ function ShareView({ token }) {
   const resetSlot = (() => { const off = -new Date(now.toLocaleString("en-US", { timeZone: tz })).getTimezoneOffset(); return ((Math.round(-off / 30) % 48) + 48) % 48; })();
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "radial-gradient(ellipse at center,rgba(0,0,0,.2) 0%,rgba(0,0,0,.65) 100%)" }} />
       {/* Header */}
@@ -1556,11 +1556,11 @@ export default function App() {
     } catch { try { navigator.clipboard.writeText(text); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); } catch {} }
   };
 
-  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
+  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
   if (!user) return <><style>{globalCSS}</style><LoginPage /></>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", position: "relative" }}>
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "radial-gradient(ellipse at center,rgba(0,0,0,.2) 0%,rgba(0,0,0,.65) 100%)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
