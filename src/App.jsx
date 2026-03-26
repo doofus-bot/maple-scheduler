@@ -794,11 +794,9 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const gridRef = useRef(null);
 
   const SLOT_COUNT = 48;
-  const LABEL_W = 50;
-  const HEADER_H = 44;
-  const maxGridH = typeof window !== "undefined" ? window.innerHeight - 200 : 600;
-  const ROW_H = Math.max(20, Math.min(36, Math.floor(maxGridH / SLOT_COUNT)));
-  const gridH = SLOT_COUNT * ROW_H;
+  const DAY_LABEL_W = 48;
+  const ROW_H = 52;
+  const COL_W = 76;
   const [nowSlot, setNowSlot] = useState(() => { const n = new Date(); return n.getHours() * 2 + n.getMinutes() / 30; });
 
   useEffect(() => {
@@ -845,12 +843,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const getGridSlot = (e) => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top + gridRef.current.scrollTop;
-    const col = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
-    const slot = Math.floor((y - HEADER_H) / ROW_H);
-    if (col < 0 || col > 6 || slot < 0 || slot >= SLOT_COUNT) return null;
-    return { day: DAY_ORDER[col], slot };
+    const x = e.clientX - rect.left + gridRef.current.scrollLeft;
+    const y = e.clientY - rect.top;
+    const row = Math.floor((y - 20) / ROW_H);
+    const slot = visRange.start + Math.floor((x - DAY_LABEL_W) / COL_W);
+    if (row < 0 || row > 6 || slot < visRange.start || slot >= visRange.end) return null;
+    return { day: DAY_ORDER[row], slot };
   };
 
   // Drag handlers
