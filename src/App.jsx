@@ -1541,7 +1541,7 @@ export default function App() {
           </div>
         </div>}
       </div>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: view === "schedule" ? "none" : 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
         {view === "party" && selectedParty ? (
           <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
         ) : view === "characters" ? (
