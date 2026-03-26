@@ -12,5 +12,13 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      external: (id) => {
+        // Never bundle server-only packages
+        const serverPkgs = ["better-sqlite3", "express", "express-session", "node-fetch", "compression", "connect-sqlite3", "dotenv", "cors"];
+        if (serverPkgs.some(p => id === p || id.startsWith(p + "/"))) return true;
+        return false;
+      },
+    },
   },
 });
