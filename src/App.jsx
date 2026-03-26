@@ -807,6 +807,19 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const visRange = { start: 0, end: 48 };
   const visSlots = 48;
 
+  const byDay = useMemo(() => {
+    const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
+    partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); });
+    displayList.forEach(p => { if (p.utcDay == null) m.unscheduled.push(p); });
+    m.unscheduled.sort((a, b) => {
+      const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
+      const bSolo = (b.members?.length || 0) <= 1 ? 1 : 0;
+      return aSolo - bSolo;
+    });
+    for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
+    return m;
+  }, [partyList, displayList]);
+
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
   const getStartSlot = (p) => p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
