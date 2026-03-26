@@ -780,7 +780,7 @@ function ProfileModal({ user, onClose, onSave }) {
 
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
-  const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id));
+  const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id || m.userId === user.username));
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [showSolos, setShowSolos] = useState(user.showSolos !== false);
@@ -805,6 +805,16 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + n.getMinutes() / 30); }, 15000);
     return () => clearInterval(iv);
   }, []);
+
+  // Scroll to center current time on mount
+  const scrolledRef = useRef(false);
+  useEffect(() => {
+    if (scrolledRef.current || !gridRef.current) return;
+    const viewportH = gridRef.current.clientHeight;
+    const scrollTo = nowSlot * ROW_H - viewportH / 2;
+    gridRef.current.scrollTop = Math.max(0, scrollTo);
+    scrolledRef.current = true;
+  });
 
   const visRange = { start: 0, end: 48 };
   const visSlots = 48;
@@ -1227,12 +1237,14 @@ function ShareView({ token }) {
   const [tz, setTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [me, setMe] = useState(null);
   const [compare, setCompare] = useState(false);
+  const [sharedOnly, setSharedOnly] = useState(false);
+  const [myParties, setMyParties] = useState(null);
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
 
   useEffect(() => {
     fetch(`/api/share/${token}`).then(r => r.ok ? r.json() : Promise.reject()).then(setData).catch(() => setError(true));
-    API.get("/api/me").then(d => { if (d) setMe(d); }).catch(() => {});
+    API.get("/api/me").then(d => { if (d) { setMe(d); API.get("/api/parties").then(p => setMyParties(p || {})).catch(() => {}); } }).catch(() => {});
   }, [token]);
 
   if (error) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
@@ -1300,11 +1312,38 @@ function ShareView({ token }) {
   };
   const myConverted = compare ? convertMyAvail() : {};
 
+  // Shared bosses: boss names that appear in both owner's and viewer's parties
+  const sharedBossKeys = useMemo(() => {
+    if (!me || !myParties) return new Set();
+    const myBosses = new Set();
+    Object.values(myParties).forEach(p => {
+      if (p.skipped || !p.members?.some(m => m.userId === me.id)) return;
+      p.bosses?.forEach(b => myBosses.add(`${b.bossName}|${b.difficulty}`));
+    });
+    const shared = new Set();
+    partyList.forEach(p => {
+      p.bosses?.forEach(b => { if (myBosses.has(`${b.bossName}|${b.difficulty}`)) shared.add(p.id); });
+    });
+    return shared;
+  }, [me, myParties, partyList]);
+
+  const isShared = (p) => sharedBossKeys.has(p.id);
+
   const fmtSlot = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const LABEL_W = 50;
   const HEADER_H = 44;
   const ROW_H = 28;
   const resetSlot = (() => { const off = -new Date(now.toLocaleString("en-US", { timeZone: tz })).getTimezoneOffset(); return ((Math.round(-off / 30) % 48) + 48) % 48; })();
+  const shareGridRef = useRef(null);
+
+  // Scroll to current time on mount
+  useEffect(() => {
+    if (!shareGridRef.current) return;
+    const viewerNow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+    const nowSlot = viewerNow.getHours() * 2 + viewerNow.getMinutes() / 30;
+    const targetY = shareGridRef.current.offsetTop + HEADER_H + nowSlot * ROW_H - window.innerHeight / 2;
+    window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+  }, [data]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>
@@ -1326,13 +1365,15 @@ function ShareView({ token }) {
           {me && <button onClick={() => setCompare(!compare)} style={{ ...S.btnGhost, fontSize: 11, ...(compare ? S.btnActive : {}) }}>
             {compare ? "\u2713 Comparing" : "Compare My Schedule"}
           </button>}
+          {me && myParties && <button onClick={() => setSharedOnly(!sharedOnly)} style={{ ...S.btnGhost, fontSize: 11, ...(sharedOnly ? { color: "#f59e0b", borderColor: "rgba(245,158,11,.3)", background: "rgba(245,158,11,.1)" } : {}) }}>
+            {sharedOnly ? "\u2713 Shared Bosses" : "Shared Bosses"}
+          </button>}
           {!me && <a href="/auth/discord" style={{ ...S.btnGhost, textDecoration: "none", fontSize: 11 }}>Login to Compare</a>}
         </div>
       </div>
       {/* Vertical schedule grid */}
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
-        <div style={{ ...BACKDROP, padding: 16 }}>
-          {/* Day headers */}
+        <div ref={shareGridRef} style={{ ...BACKDROP, padding: 16 }}>
           <div style={{ display: "flex", height: HEADER_H }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
             {viewerDayOrder.map(di => (
@@ -1374,6 +1415,8 @@ function ShareView({ token }) {
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
                   const mc = p.members?.length || 1;
                   const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : `${mc}p`;
+                  const shared = isShared(p);
+                  const dimmed = sharedOnly && !shared;
                   return (
                     <div key={p.id}
                       onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); }}
@@ -1388,6 +1431,8 @@ function ShareView({ token }) {
                       boxShadow: `0 0 6px ${dc}33`,
                       fontFamily: "'Comfortaa',sans-serif",
                       display: "flex", flexDirection: "column", justifyContent: "space-between",
+                      opacity: dimmed ? 0.15 : 1,
+                      transition: "opacity .3s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
                         <span style={{ fontSize: 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
@@ -1410,8 +1455,9 @@ function ShareView({ token }) {
               </div>
             )}
           </div>
-          {compare && <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
-            <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.15)", marginRight: 3, verticalAlign: "middle" }} />My Available</span>
+          {(compare || sharedOnly) && <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
+            {compare && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.15)", marginRight: 3, verticalAlign: "middle" }} />My Available</span>}
+            {sharedOnly && <span style={{ color: "#f59e0b" }}>{sharedBossKeys.size} shared boss{sharedBossKeys.size !== 1 ? "es" : ""} highlighted</span>}
           </div>}
         </div>
       </div>
