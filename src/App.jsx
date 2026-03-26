@@ -1451,6 +1451,11 @@ export default function App() {
   const [view, setView] = useState("schedule");
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [showSharePopover, setShowSharePopover] = useState(false);
+
+  // Pre-load share token if user has one
+  useEffect(() => { if (user?.shareToken) setShareUrl(`${window.location.origin}/share/${user.shareToken}`); }, [user]);
 
   useEffect(() => { (async () => {
     try { const d = await API.get("/api/me"); setUser(d); if (d) { const p = await API.get("/api/parties"); setParties(p || {}); const u = await API.get("/api/users"); setAllUsers(u || []); } } catch { setUser(null); }
@@ -1517,18 +1522,26 @@ export default function App() {
   const generateShare = async () => {
     try {
       const r = await fetch("/api/me/share", { method: "POST", credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
       const d = await r.json();
-      setShareUrl(`${window.location.origin}/share/${d.token}`);
-    } catch {}
+      const url = `${window.location.origin}/share/${d.token}`;
+      setShareUrl(url);
+      navigator.clipboard.writeText(url).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
+    } catch (e) { console.error("Share error:", e); }
   };
   const regenerateShare = async () => {
     try {
       const r = await fetch("/api/me/share/regenerate", { method: "POST", credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
       const d = await r.json();
-      setShareUrl(`${window.location.origin}/share/${d.token}`);
-    } catch {}
+      const url = `${window.location.origin}/share/${d.token}`;
+      setShareUrl(url);
+      navigator.clipboard.writeText(url).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
+    } catch (e) { console.error("Regenerate error:", e); }
   };
-  const copyShare = () => { if (shareUrl) navigator.clipboard.writeText(shareUrl); };
+  const copyShare = () => {
+    if (shareUrl) navigator.clipboard.writeText(shareUrl).then(() => { setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); });
+  };
 
   if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png') center center / cover fixed", color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}><style>{globalCSS}</style><div style={{ animation: "pulse 1.5s infinite" }}>Loading...</div></div>;
   if (!user) return <><style>{globalCSS}</style><LoginPage /></>;
@@ -1543,20 +1556,23 @@ export default function App() {
           <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
           <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
-          <button style={{ ...S.btnGhost, fontSize: 12 }} onClick={() => shareUrl ? setShareUrl(null) : generateShare()}>🔗 Share</button>
+          <button style={{ ...S.btnGhost, fontSize: 12, ...(shareCopied ? { color: "#10b981", borderColor: "rgba(34,197,94,.3)" } : {}) }} onClick={() => {
+            if (shareUrl) { copyShare(); } else { generateShare(); }
+          }}>{shareCopied ? "✓ Link Copied!" : "🔗 Share"}</button>
+          {shareUrl && <button style={{ ...S.btnGhost, fontSize: 9, padding: "4px 6px" }} onClick={() => setShowSharePopover(!showSharePopover)}>▼</button>}
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
           <a href="/auth/logout" style={{ ...S.btnGhost, textDecoration: "none", fontSize: 12 }}>Logout</a>
         </div>
         {/* Share popover */}
-        {shareUrl && <div style={{ position: "absolute", right: 24, top: 54, zIndex: 60, background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)", width: 340 }}>
+        {showSharePopover && shareUrl && <div style={{ position: "absolute", right: 24, top: 54, zIndex: 60, background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)", width: 340 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", marginBottom: 8 }}>Share Your Schedule</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             <input readOnly value={shareUrl} style={{ ...S.input, fontSize: 10, padding: "6px 8px", flex: 1 }} onClick={e => e.target.select()} />
-            <button onClick={copyShare} style={{ ...S.btnPrimary, fontSize: 10, padding: "6px 10px", whiteSpace: "nowrap" }}>Copy</button>
+            <button onClick={copyShare} style={{ ...S.btnPrimary, fontSize: 10, padding: "6px 10px", whiteSpace: "nowrap" }}>{shareCopied ? "✓" : "Copy"}</button>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button onClick={regenerateShare} style={{ ...S.btnGhost, fontSize: 9, padding: "3px 8px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Regenerate Link</button>
-            <div style={{ fontSize: 9, color: "#475569" }}>View-only · anyone with the link</div>
+            <button onClick={() => setShowSharePopover(false)} style={{ ...S.btnGhost, fontSize: 9, padding: "3px 8px" }}>Close</button>
           </div>
         </div>}
       </div>
