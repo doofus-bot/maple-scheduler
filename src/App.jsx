@@ -997,12 +997,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
                   const hasA = isAvail(dayIdx, si);
-                  const isHour = si % 2 === 0 && si > 0;
-                  const isReset = si === RESET_SLOT;
+                  const isHour = si % 2 === 1; // right edge of odd slots = hour boundaries
+                  const isReset = (si + 1) === RESET_SLOT; // don't draw line where reset line goes
                   return <div key={vi} style={{
                     width: COL_W, height: ROW_H, flexShrink: 0,
                     background: hasA ? "rgba(34,197,94,.15)" : "rgba(20,24,41,.5)",
-                    borderRight: isReset ? "none" : isHour ? "1px dashed rgba(255,255,255,.18)" : "1px solid rgba(30,36,64,.08)",
+                    borderRight: isReset ? "none" : isHour ? "1px dashed rgba(255,255,255,.18)" : "none",
                   }} />;
                 })}
                 {(byDay[dayIdx] || []).map(p => {
