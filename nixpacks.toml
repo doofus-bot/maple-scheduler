@@ -2,7 +2,7 @@
 nixPkgs = ["python3", "gcc", "pkg-config"]
 
 [phases.build]
-cmds = ["npm install", "npm run build"]
+cmds = ["npm install --include=dev", "npm run build"]
 
 [start]
 cmd = "npm start"
