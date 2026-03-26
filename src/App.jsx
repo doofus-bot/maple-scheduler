@@ -805,7 +805,6 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const COL_W = Math.max(16, Math.floor((containerW - DAY_LABEL_W) / visSlots));
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
@@ -857,6 +856,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   }, [editing, expanded, avail, partyList]);
 
   const visSlots = visRange.end - visRange.start;
+  const COL_W = Math.max(16, Math.floor((containerW - DAY_LABEL_W) / visSlots));
 
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
