@@ -978,6 +978,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           <div style={{ width: DAY_LABEL_W + SLOT_COUNT * COL_W, position: "relative" }}>
           {/* Hour labels across top */}
           <div style={{ position: "relative", marginLeft: DAY_LABEL_W, height: 20 }}>
+            <div style={{ position: "absolute", left: -DAY_LABEL_W, width: DAY_LABEL_W, height: 20, background: "rgba(11,14,26,.95)", zIndex: 7 }} />
             {Array.from({ length: 24 }, (_, h) => {
               const si = h * 2;
               if (si < visRange.start || si >= visRange.end) return null;
@@ -987,9 +988,9 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             })}
           </div>
           {/* Day rows */}
-          {DAY_ORDER.map(dayIdx => (
-            <div key={dayIdx} style={{ display: "flex", position: "relative", height: ROW_H, borderTop: "1px solid rgba(30,36,64,.25)" }}>
-              <div style={{ width: DAY_LABEL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: "rgba(11,14,26,.6)" }}>
+          {DAY_ORDER.map((dayIdx, ri) => (
+            <div key={dayIdx} style={{ display: "flex", position: "relative", height: ROW_H, borderTop: ri > 0 ? "1px solid rgba(255,255,255,.08)" : "none" }}>
+              <div style={{ width: DAY_LABEL_W, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", background: "rgba(11,14,26,.95)", position: "sticky", left: 0, zIndex: 6, borderRight: "1px solid rgba(30,36,64,.4)" }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{DAYS_SHORT[dayIdx]}</span>
                 <span style={{ fontSize: 8, color: "#64748b" }}>{byDay[dayIdx]?.length || 0}</span>
               </div>
