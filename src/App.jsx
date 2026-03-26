@@ -783,7 +783,6 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id));
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [showSolos, setShowSolos] = useState(user.showSolos !== false);
   const toggleSolos = () => { const next = !showSolos; setShowSolos(next); API.patch("/api/me", { showSolos: next }).catch(() => {}); };
   const [dragging, setDragging] = useState(null);
@@ -797,14 +796,26 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const SLOT_COUNT = 48;
   const DAY_LABEL_W = 48;
   const ROW_H = 52;
-  const containerRef = useRef(null);
-  const [containerW, setContainerW] = useState(1200);
+  const COL_W = 76; // Fixed width per 30-min slot — ~12hrs visible on 1920px
+  const [nowSlot, setNowSlot] = useState(() => { const n = new Date(); return n.getHours() * 2 + (n.getMinutes() >= 30 ? 1 : 0); });
+  const scrolledRef = useRef(false);
+
+  // Update current time line every 30 seconds
   useEffect(() => {
-    const measure = () => { if (containerRef.current) setContainerW(containerRef.current.offsetWidth); };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + (n.getMinutes() >= 30 ? 1 : 0) + n.getMinutes() % 30 / 30); }, 15000);
+    return () => clearInterval(iv);
   }, []);
+
+  // Scroll to center current time on initial load
+  useEffect(() => {
+    if (scrolledRef.current || !gridRef.current) return;
+    const n = new Date();
+    const currentSlotFrac = n.getHours() * 2 + n.getMinutes() / 30;
+    const viewportW = gridRef.current.clientWidth - DAY_LABEL_W;
+    const scrollTo = currentSlotFrac * COL_W - viewportW / 2;
+    gridRef.current.scrollLeft = Math.max(0, scrollTo);
+    scrolledRef.current = true;
+  });
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
@@ -819,44 +830,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     return m;
   }, [partyList, displayList]);
 
-  const visRange = useMemo(() => {
-    // Full grid when editing or expanded
-    if (editing || expanded) {
-      // Expanded: show full availability range
-      let rawMin = 48, rawMax = 0;
-      for (let d = 0; d < 7; d++) for (let s = 0; s < 48; s++) { if (avail[`${d}-${s}`] === "available") { rawMin = Math.min(rawMin, s); rawMax = Math.max(rawMax, s + 1); } }
-      partyList.forEach(p => { if (p.utcDay != null) { const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((p.duration || 30) / 30)); rawMin = Math.min(rawMin, ss); rawMax = Math.max(rawMax, ss + dur); } });
-      if (rawMin >= rawMax) return { start: 0, end: 48 };
-      // Include reset
-      rawMin = Math.min(rawMin, RESET_SLOT);
-      rawMax = Math.max(rawMax, RESET_SLOT + 1);
-      return { start: Math.max(0, rawMin - 2), end: Math.min(48, rawMax + 2) };
-    }
-    // Default: compact 6hr window centered on scheduled bosses
-    let bossSlots = [];
-    partyList.forEach(p => {
-      if (p.utcDay != null) {
-        const ss = p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
-        const dur = Math.max(1, Math.ceil((p.duration || 30) / 30));
-        for (let i = ss; i < ss + dur; i++) bossSlots.push(i);
-      }
-    });
-    if (bossSlots.length === 0) {
-      // No scheduled bosses — small window around reset
-      return { start: Math.max(0, RESET_SLOT - 6), end: Math.min(48, RESET_SLOT + 6) };
-    }
-    let mn = Math.min(...bossSlots), mx = Math.max(...bossSlots);
-    // If boss span already > 12 slots (6hrs), use that plus padding
-    const bossSpan = mx - mn + 1;
-    const minWindow = Math.max(12, bossSpan); // at least 6hrs
-    // Center the window on the boss midpoint
-    const mid = Math.floor((mn + mx) / 2);
-    const halfW = Math.ceil(minWindow / 2) + 2; // +2 padding
-    return { start: Math.max(0, mid - halfW), end: Math.min(48, mid + halfW) };
-  }, [editing, expanded, avail, partyList]);
-
-  const visSlots = visRange.end - visRange.start;
-  const COL_W = Math.max(16, Math.floor((containerW - DAY_LABEL_W) / visSlots));
+  const visRange = { start: 0, end: 48 };
+  const visSlots = 48;
 
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
@@ -963,7 +938,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
 
   return (
-    <div ref={containerRef}>
+    <div>
       {/* ── TOP BAR — Controls ── */}
       <div style={{ ...BACKDROP, padding: "8px 12px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -972,31 +947,42 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             {editing ? "✓ Done" : "✎ Edit"}
           </button>
           {undoStack.length > 0 && <button onClick={undo} style={{ ...S.btnGhost, fontSize: 10, padding: "4px 8px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>↩ Undo</button>}
-          <button onClick={() => setExpanded(!expanded)}
-            style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid #1e2440", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expanded ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)", color: "#94a3b8" }}>
-            {expanded ? "▾ Collapse" : "▸ Expand"}
-          </button>
           <button onClick={toggleSolos}
             style={{ fontSize: 10, padding: "4px 8px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
             {showSolos ? "👤 Solos" : "👤 Hidden"}
           </button>
         </div>
-        <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>
-          {fmtSlot(visRange.start)} – {fmtSlot(visRange.end)} · {visSlots / 2}hrs
-        </span>
+        {/* Current time + reset relation */}
+        {(() => {
+          const now = new Date();
+          const localTime = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+          const utcH = now.getUTCHours(), utcM = now.getUTCMinutes();
+          const minsFromReset = utcH * 60 + utcM;
+          const minsToReset = 24 * 60 - minsFromReset;
+          // Use negative (time until next reset) if within 8hrs of next reset
+          const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
+          const absMins = useNeg ? minsToReset : minsFromReset;
+          const rH = Math.floor(absMins / 60), rM = absMins % 60;
+          const resetStr = (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
+          return <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
+            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{localTime}</span>
+            <span style={{ marginLeft: 8, color: ACCENT, fontWeight: 700 }}>Reset {resetStr}</span>
+          </span>;
+        })()}
       </div>
 
-      {/* ── GRID — Full width ── */}
+      {/* ── GRID — Full width, horizontal scroll ── */}
       <div style={{ ...BACKDROP, padding: "0 0 4px 0", position: "relative" }}>
-        <div ref={gridRef} style={{ position: "relative", overflow: "hidden" }}
+        <div ref={gridRef} style={{ position: "relative", overflowX: "auto", overflowY: "hidden" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
+          <div style={{ width: DAY_LABEL_W + SLOT_COUNT * COL_W, position: "relative" }}>
           {/* Hour labels across top */}
           <div style={{ display: "flex", marginLeft: DAY_LABEL_W, height: 20 }}>
             {Array.from({ length: visSlots }, (_, vi) => {
               const si = visRange.start + vi;
               if (si % 2 !== 0) return null;
               const h = Math.floor(si / 2);
-              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px" }}>
+              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 9, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px" }}>
                 {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
               </div>;
             })}
@@ -1067,6 +1053,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               <span style={{ position: "absolute", top: -14, left: 4, fontSize: 7, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
             </div>
           )}
+          {/* Current time line */}
+          <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + nowSlot * COL_W, width: 0, borderLeft: "2px solid rgba(255,255,255,.7)", pointerEvents: "none", zIndex: 9, transition: "left 30s linear" }}>
+            <div style={{ position: "absolute", top: -4, left: -5, width: 8, height: 8, borderRadius: "50%", background: "#fff", boxShadow: "0 0 6px rgba(255,255,255,.5)" }} />
+          </div>
+          </div>{/* close inner wrapper */}
         </div>
       </div>
 
@@ -1534,18 +1525,19 @@ export default function App() {
   const generateShare = async () => {
     if (shareUrl) { setShowSharePopover(true); doCopy(shareUrl); return; }
     try {
-      const r = await fetch("/api/me/share", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" } });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const r = await fetch("/api/me/share", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (!r.ok) { const txt = await r.text(); throw new Error(`HTTP ${r.status}: ${txt}`); }
       const d = await r.json();
+      if (!d.token) throw new Error("No token returned");
       const url = `${window.location.origin}/share/${d.token}`;
       setShareUrl(url);
       setShowSharePopover(true);
       doCopy(url);
-    } catch (e) { console.error("Share error:", e); alert("Failed to generate share link. Check console."); }
+    } catch (e) { console.error("Share error:", e); alert("Failed to generate share link: " + e.message); }
   };
   const regenerateShare = async () => {
     try {
-      const r = await fetch("/api/me/share/regenerate", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" } });
+      const r = await fetch("/api/me/share/regenerate", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       const url = `${window.location.origin}/share/${d.token}`;
