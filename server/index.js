@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import fetch from "node-fetch";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import crypto from "crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -237,20 +238,24 @@ app.put("/api/parties", requireAuth, (req, res) => {
    ════════════════════════════════════════ */
 // Generate or get share token
 app.post("/api/me/share", requireAuth, (req, res) => {
-  let user = db.prepare("SELECT share_token FROM users WHERE id = ?").get(req.user.id);
-  if (!user.share_token) {
-    const token = require("crypto").randomBytes(8).toString("hex");
-    db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
-    user = { share_token: token };
-  }
-  res.json({ token: user.share_token });
+  try {
+    let user = db.prepare("SELECT share_token FROM users WHERE id = ?").get(req.user.id);
+    if (!user.share_token) {
+      const token = crypto.randomBytes(8).toString("hex");
+      db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
+      user = { share_token: token };
+    }
+    res.json({ token: user.share_token });
+  } catch (err) { console.error("Share error:", err); res.status(500).json({ error: err.message }); }
 });
 
 // Regenerate share token
 app.post("/api/me/share/regenerate", requireAuth, (req, res) => {
-  const token = require("crypto").randomBytes(8).toString("hex");
-  db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
-  res.json({ token });
+  try {
+    const token = crypto.randomBytes(8).toString("hex");
+    db.prepare("UPDATE users SET share_token = ? WHERE id = ?").run(token, req.user.id);
+    res.json({ token });
+  } catch (err) { console.error("Regenerate error:", err); res.status(500).json({ error: err.message }); }
 });
 
 // Public share endpoint — no auth required
