@@ -389,7 +389,16 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
     return map;
   }, [allParties, party, memberUsers]);
 
-  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 36) / ((r.width - 36) / 7)); const s = Math.floor((e.clientY - r.top - 22) / ((r.height - 22) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
+  const getSlot = (e) => {
+    if (!gridRef.current) return null;
+    const r = gridRef.current.getBoundingClientRect();
+    const x = e.clientX - r.left + gridRef.current.scrollLeft;
+    const y = e.clientY - r.top;
+    const row = Math.floor((y - 22) / 36);
+    const s = Math.floor((x - 50) / 14);
+    if (row < 0 || row > 6 || s < 0 || s > 47) return null;
+    return { day: DAY_ORDER[row], slot: s };
+  };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (!settingTime && pos) setHoverCell(pos); };
@@ -603,53 +612,54 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
         {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
       </div>
 
-      {/* ── RIGHT PANEL — Schedule Grid ── */}
+      {/* ── RIGHT PANEL — Schedule Grid (horizontal) ── */}
       <div style={{ flex: 1, ...BACKDROP, padding: 12, minWidth: 0 }}>
-        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click start time, then end time{timeAnchor ? ` — started at ${slotToTime(timeAnchor.slot)} on ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
-        {/* Hover time tooltip */}
+        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click a time slot{timeAnchor ? ` — start: ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}. Click end time (same day)` : ""}</div>}
         {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
-        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", height: "calc(100vh - 140px)", minHeight: 500 }}
-          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const x = Math.min(e.clientX + 14, window.innerWidth - 240); const y = Math.min(e.clientY + 14, window.innerHeight - 100); setHoverCellPos({ left: x, top: y }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
-          <div style={{ display: "grid", gridTemplateColumns: "36px repeat(7,1fr)", height: "100%" }}>
-            {/* Header */}
-            <div style={{ height: 22 }} />
-            {DAY_ORDER.map(d => <div key={d} style={{ height: 22, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "22px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[d]}</div>)}
-            {/* Time rows */}
-            {Array.from({ length: 24 }, (_, h) => {
-              const slot = h * 2;
-              return [
-                <div key={`l${h}`} style={{ fontSize: 8, color: "#475569", textAlign: "right", paddingRight: 4, fontFamily: "'Comfortaa',sans-serif", display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid rgba(30,36,64,.15)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>,
-                ...DAY_ORDER.map(di => {
-                  const info = getCellInfo(di, slot);
-                  const isSch = partySlots.has(`${di}-${slot}`) || partySlots.has(`${di}-${slot + 1}`);
-                  const isPr = timePrev.has(`${di}-${slot}`) || timePrev.has(`${di}-${slot + 1}`);
-                  const isHov = settingTime && hoverTime && hoverTime.day === di && (hoverTime.slot === slot || hoverTime.slot === slot + 1);
-                  let bg = "rgba(20,24,41,.8)";
-                  if (isSch) bg = "rgba(37,99,235,.5)";
-                  else if (isPr) bg = "rgba(37,99,235,.35)";
-                  else if (isHov) bg = "rgba(37,99,235,.2)";
-                  else if (info.bc > 0) bg = "rgba(251,146,36,.35)"; // conflict — orange
-                  else if (info.ac === info.tot && info.tot > 0) bg = "rgba(34,197,94,.35)"; // ALL available — green
-                  else if (info.ac > 0) bg = "rgba(251,191,36,.18)"; // SOME unavailable — amber
-                  else bg = "rgba(239,68,68,.22)"; // NONE available — red
-                  const is4hr = h > 0 && h % 4 === 0;
-                  return <div key={`${h}-${di}`} style={{ minHeight: 20, borderTop: is4hr ? "1px solid rgba(255,255,255,.18)" : "1px solid rgba(30,36,64,.2)", borderLeft: "1px solid rgba(30,36,64,.12)", background: bg }} />;
-                }),
-              ];
-            }).flat()}
+        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto" }}
+          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { setHoverCellPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
+          {/* Hour labels */}
+          <div style={{ display: "flex", marginLeft: 50, height: 20 }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} style={{ width: 28, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+                {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+              </div>
+            ))}
           </div>
-          {/* Reset line */}
-          <div style={{ position: "absolute", left: 36, right: 0, top: 22 + (RESET_SLOT / 48) * (gridRef.current?.clientHeight - 22 || 500), height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
-            <span style={{ position: "absolute", right: 4, top: -12, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+          {/* Day rows */}
+          {DAY_ORDER.map(di => (
+            <div key={di} style={{ display: "flex", height: 36, borderBottom: "1px solid rgba(30,36,64,.2)" }}>
+              <div style={{ width: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", position: "sticky", left: 0, zIndex: 2, background: "rgba(11,14,26,.95)" }}>{DAYS_SHORT[di]}</div>
+              {Array.from({ length: 48 }, (_, si) => {
+                const info = getCellInfo(di, si);
+                const isSch = partySlots.has(`${di}-${si}`);
+                const isPr = timePrev.has(`${di}-${si}`);
+                const isHov = settingTime && hoverTime && hoverTime.day === di && hoverTime.slot === si;
+                let bg = "rgba(20,24,41,.8)";
+                if (isSch) bg = "rgba(37,99,235,.5)";
+                else if (isPr) bg = "rgba(37,99,235,.35)";
+                else if (isHov) bg = "rgba(37,99,235,.2)";
+                else if (info.bc > 0) bg = "rgba(251,146,36,.35)";
+                else if (info.ac === info.tot && info.tot > 0) bg = "rgba(34,197,94,.35)";
+                else if (info.ac > 0) bg = "rgba(251,191,36,.18)";
+                else bg = "rgba(239,68,68,.22)";
+                const is4hr = si % 8 === 0 && si > 0;
+                return <div key={si} style={{ width: 14, height: 36, flexShrink: 0, background: bg, borderRight: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.2)" : "1px solid rgba(30,36,64,.08)" }} />;
+              })}
+            </div>
+          ))}
+          {/* Vertical reset line */}
+          <div style={{ position: "absolute", top: 20, bottom: 0, left: 50 + RESET_SLOT * 14, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
+            <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
           </div>
         </div>
         {/* Legend */}
-        <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(37,99,235,.5)", marginRight: 3, verticalAlign: "middle" }} />Scheduled</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Free</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,191,36,.18)", marginRight: 3, verticalAlign: "middle" }} />Partial</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(239,68,68,.22)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
-          <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(251,146,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
+        <div style={{ display: "flex", gap: 10, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.5)", marginRight: 3, verticalAlign: "middle" }} />Scheduled</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Free</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.18)", marginRight: 3, verticalAlign: "middle" }} />Partial</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.22)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
+          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,146,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
         </div>
         {/* Cell hover tooltip */}
         {hoverCell && hoverCellPos && !settingTime && (() => {
@@ -698,14 +708,23 @@ function ProfileModal({ user, onClose, onSave }) {
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => setChars(p => p.filter((_, j) => j !== i));
-  const getSlot = (e) => { if (!gridRef.current) return null; const r = gridRef.current.getBoundingClientRect(); const col = Math.floor((e.clientX - r.left - 40) / ((r.width - 40) / 7)); const s = Math.floor((e.clientY - r.top - 24) / ((r.height - 24) / 48)); if (col < 0 || col > 6 || s < 0 || s > 47) return null; return { day: DAY_ORDER[col], slot: s }; };
+  const getSlot = (e) => {
+    if (!gridRef.current) return null;
+    const r = gridRef.current.getBoundingClientRect();
+    const x = e.clientX - r.left + gridRef.current.scrollLeft;
+    const y = e.clientY - r.top;
+    const row = Math.floor((y - 20) / 36);
+    const s = Math.floor((x - 50) / 14);
+    if (row < 0 || row > 6 || s < 0 || s > 47) return null;
+    return { day: DAY_ORDER[row], slot: s };
+  };
   const getPreview = () => { if (!anchor || !hover || anchor.day !== hover.day) return new Set(); const s = new Set(); for (let i = Math.min(anchor.slot, hover.slot); i <= Math.max(anchor.slot, hover.slot); i++) s.add(`${anchor.day}-${i}`); return s; };
   const onClick = (e) => { e.preventDefault(); const pos = getSlot(e); if (!pos) return; if (!anchor) { const k = `${pos.day}-${pos.slot}`; setAnchor(pos); setMode(avail[k] === "available" ? "deselect" : "select"); } else { if (pos.day === anchor.day) { const mn = Math.min(anchor.slot, pos.slot), mx = Math.max(anchor.slot, pos.slot); setAvail(p => { const c = { ...p }; for (let s = mn; s <= mx; s++) { const k = `${pos.day}-${s}`; if (mode === "select") c[k] = "available"; else delete c[k]; } return c; }); } setAnchor(null); setHover(null); setMode(null); } };
   useEffect(() => { const h = e => { if (e.key === "Escape") { setAnchor(null); setHover(null); setMode(null); } }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, []);
   const preview = getPreview();
 
   return (
-    <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(720px,95vw)" }} onClick={e => e.stopPropagation()}>
+    <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(820px,95vw)" }} onClick={e => e.stopPropagation()}>
       <div style={S.modalHead}>
         <span style={S.modalTitle}>Profile Settings</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -723,15 +742,35 @@ function ProfileModal({ user, onClose, onSave }) {
           {chars.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{chars.map((c, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 13, color: ACCENT, background: ACCENT_LIGHT, border: `1px solid ${ACCENT_BORDER}`, fontFamily: "'Comfortaa',sans-serif" }}>{c}<button onClick={() => rmChar(i)} style={{ width: 16, height: 16, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.2)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✕</button></div>)}</div> : <div style={{ fontSize: 13, color: "#475569" }}>No characters added yet.</div>}
         </div>
         <label style={S.label}>Availability</label>
-        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "hidden", height: 420 }}
+        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "auto" }}
           onClick={onClick} onMouseMove={e => setHover(getSlot(e))} onMouseLeave={() => setHover(null)}>
-          <div style={{ display: "flex", height: 24 }}><div style={{ width: 40, flexShrink: 0 }} />{DAY_ORDER.map(d => <div key={d} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", lineHeight: "24px", fontFamily: "'Comfortaa',sans-serif" }}>{DAYS_SHORT[d]}</div>)}</div>
-          <div style={{ display: "flex", height: 396 }}>
-            <div style={{ width: 40, flexShrink: 0, position: "relative" }}>{Array.from({ length: 24 }, (_, h) => <div key={h} style={{ position: "absolute", top: `${(h * 2 / 48) * 100}%`, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, transform: "translateY(-50%)" }}>{h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}</div>)}</div>
-            {DAY_ORDER.map(di => <div key={di} style={{ flex: 1, display: "flex", flexDirection: "column", borderLeft: "1px solid rgba(255,255,255,.03)" }}>{Array.from({ length: 48 }, (_, si) => { const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si; return <div key={si} style={{ flex: 1, minHeight: 0, background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent", borderBottom: si % 2 === 1 ? "1px solid rgba(255,255,255,.03)" : "none", transition: "background .08s" }} />; })}</div>)}
+          {/* Hour labels */}
+          <div style={{ display: "flex", marginLeft: 50, height: 20 }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} style={{ width: 28, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+                {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+              </div>
+            ))}
           </div>
-          <div style={{ position: "absolute", left: 40, right: 0, top: 24 + (RESET_SLOT / 48) * 396, height: 0, borderTop: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
-            <span style={{ position: "absolute", right: 4, top: -14, fontSize: 9, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 4px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif" }}>0:00 UTC</span>
+          {/* Day rows */}
+          {DAY_ORDER.map(di => (
+            <div key={di} style={{ display: "flex", height: 36, borderBottom: "1px solid rgba(30,36,64,.15)" }}>
+              <div style={{ width: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", position: "sticky", left: 0, zIndex: 2, background: "rgba(11,14,26,.95)" }}>{DAYS_SHORT[di]}</div>
+              {Array.from({ length: 48 }, (_, si) => {
+                const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si;
+                const is4hr = si % 8 === 0 && si > 0;
+                return <div key={si} style={{
+                  width: 14, height: 36, flexShrink: 0,
+                  background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent",
+                  borderRight: is4hr ? "1px solid rgba(255,255,255,.12)" : si % 2 === 1 ? "1px solid rgba(255,255,255,.03)" : "none",
+                  transition: "background .08s",
+                }} />;
+              })}
+            </div>
+          ))}
+          {/* Vertical reset line */}
+          <div style={{ position: "absolute", top: 20, bottom: 0, left: 50 + RESET_SLOT * 14, width: 0, borderLeft: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>0:00 UTC</span>
           </div>
         </div>
       </div>
@@ -755,9 +794,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
-  const HEADER_H = 44;
+  const HEADER_H = 24;
   const SLOT_COUNT = 48;
-  const LABEL_W = 50;
+  const DAY_LABEL_W = 54;
+  const ROW_H = 56; // Each day row height
+  const COL_W = 28; // Each 30-min slot width
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
@@ -809,9 +850,6 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   }, [editing, expanded, avail, partyList]);
 
   const visSlots = visRange.end - visRange.start;
-  const maxGridH = typeof window !== "undefined" ? window.innerHeight - 160 : 600;
-  const ROW_H = Math.max(24, Math.min(44, Math.floor(maxGridH / visSlots)));
-  const gridH = visSlots * ROW_H;
 
   // Duration in 30-min slots
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
@@ -849,12 +887,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const getGridSlot = (e) => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top + gridRef.current.scrollTop;
-    const col = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
-    const slot = visRange.start + Math.floor((y - HEADER_H) / ROW_H);
-    if (col < 0 || col > 6 || slot < visRange.start || slot >= visRange.end) return null;
-    return { day: DAY_ORDER[col], slot };
+    const x = e.clientX - rect.left + gridRef.current.scrollLeft;
+    const y = e.clientY - rect.top;
+    const row = Math.floor((y - HEADER_H) / ROW_H);
+    const slot = visRange.start + Math.floor((x - DAY_LABEL_W) / COL_W);
+    if (row < 0 || row > 6 || slot < visRange.start || slot >= visRange.end) return null;
+    return { day: DAY_ORDER[row], slot };
   };
 
   // Drag handlers
@@ -1017,96 +1055,92 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
         )}
       </div>
 
-      {/* ── RIGHT — Schedule Grid ── */}
-      <div style={{ ...BACKDROP, padding: 16, position: "relative", flex: 1, minWidth: 0 }}>
-        <div ref={gridRef} style={{ position: "relative", overflow: "auto", maxHeight: "calc(100vh - 140px)" }}
+      {/* ── RIGHT — Schedule Grid (horizontal: hours = columns, days = rows) ── */}
+      <div style={{ ...BACKDROP, padding: "12px 12px 12px 0", position: "relative", flex: 1, minWidth: 0 }}>
+        <div ref={gridRef} style={{ position: "relative", overflow: "auto" }}
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
-          {/* Sticky day headers */}
-          <div style={{ display: "flex", height: HEADER_H, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
-            <div style={{ width: LABEL_W, flexShrink: 0 }} />
-            {DAY_ORDER.map(di => (
-              <div key={di} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
-                {DAYS_SHORT[di]}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[di]?.length || 0} boss{byDay[di]?.length !== 1 ? "es" : ""}</div>
-              </div>
-            ))}
+          {/* Hour labels across top */}
+          <div style={{ display: "flex", marginLeft: 54, height: 24, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
+            {Array.from({ length: visSlots }, (_, vi) => {
+              const si = visRange.start + vi;
+              if (si % 2 !== 0) return <div key={vi} style={{ width: COL_W, flexShrink: 0 }} />;
+              const h = Math.floor(si / 2);
+              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 9, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "24px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+                {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+              </div>;
+            }).filter(Boolean)}
           </div>
-          <div style={{ display: "flex", height: gridH }}>
-            <div style={{ width: LABEL_W, flexShrink: 0, position: "relative" }}>
-              {Array.from({ length: visSlots }, (_, vi) => {
-                const si = visRange.start + vi;
-                const h = Math.floor(si / 2);
-                if (si % 2 !== 0) return null;
-                return <div key={vi} style={{ position: "absolute", top: vi * ROW_H, right: 4, fontSize: 9, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
-                  {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
-                </div>;
-              })}
-            </div>
-            {DAY_ORDER.map(dayIdx => (
-              <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.08)" }}>
+          {/* Day rows */}
+          {DAY_ORDER.map(dayIdx => (
+            <div key={dayIdx} style={{ display: "flex", position: "relative", height: ROW_H, borderBottom: "1px solid rgba(30,36,64,.25)" }}>
+              {/* Day label */}
+              <div style={{ width: 54, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", position: "sticky", left: 0, zIndex: 5, background: "rgba(11,14,26,.95)" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{DAYS_SHORT[dayIdx]}</span>
+                <span style={{ fontSize: 9, color: "#64748b" }}>{byDay[dayIdx]?.length || 0}</span>
+              </div>
+              {/* Time cells + party blocks */}
+              <div style={{ position: "relative", display: "flex", flex: 1, minWidth: visSlots * COL_W }}>
+                {/* Background cells */}
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
                   const hasA = isAvail(dayIdx, si);
                   const is4hr = si % 8 === 0 && si > 0;
                   return <div key={vi} style={{
-                    position: "absolute", top: vi * ROW_H, left: 0, right: 0, height: ROW_H,
+                    width: COL_W, height: ROW_H, flexShrink: 0,
                     background: hasA ? "rgba(34,197,94,.2)" : "rgba(20,24,41,.6)",
-                    borderBottom: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.25)" : "1px solid rgba(30,36,64,.12)",
+                    borderRight: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.25)" : "1px solid rgba(30,36,64,.12)",
                   }} />;
                 })}
+                {/* Party blocks — positioned horizontally */}
                 {(byDay[dayIdx] || []).map(p => {
                   const startS = getStartSlot(p); const durS = getDurSlots(p);
                   if (startS + durS <= visRange.start || startS >= visRange.end) return null;
-                  const visTop = (startS - visRange.start) * ROW_H;
+                  const visLeft = (startS - visRange.start) * COL_W;
                   const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
-                  const startTime = fmtSlot(startS);
-                  const leadChar = p.members?.[0]?.charName;
                   const mc = p.members?.length || 1;
                   const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : mc === 5 ? "5-man" : "6-man";
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)}
-                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); } }}
-                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); } }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
                       onMouseLeave={() => setHoverParty(null)}
                       style={{
-                      position: "absolute", top: visTop + 1, left: 3, right: 3,
-                      height: durS * ROW_H - 2, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "3px 6px", overflow: "hidden",
-                      background: solo ? "rgba(160,70,70,.85)" : `rgba(20,24,41,.9)`,
+                      position: "absolute", left: visLeft + 1, top: 3,
+                      width: durS * COL_W - 2, height: ROW_H - 6, borderRadius: 6, cursor: editing ? "grab" : "pointer", zIndex: 3,
+                      padding: "2px 6px", overflow: "hidden",
+                      background: solo ? "rgba(160,70,70,.85)" : "rgba(20,24,41,.9)",
                       border: `2px solid ${solo ? "#c45c5c" : dc}`,
-                      boxShadow: `0 0 8px ${dc}44, inset 0 0 20px rgba(0,0,0,.3)`,
+                      boxShadow: `0 0 6px ${dc}44, inset 0 0 12px rgba(0,0,0,.3)`,
                       fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", flexDirection: "column", justifyContent: "space-between",
+                      display: "flex", alignItems: "center", gap: 6,
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.4)` } : {}),
                     }}>
-                      {/* Top row: Boss name + Diff | Party size */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
-                          <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
+                          <span style={{ fontSize: 7, fontWeight: 700, padding: "1px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                          <span style={{ fontSize: 7, color: "#94a3b8", flexShrink: 0 }}>{sizeLabel}</span>
                         </div>
-                        <span style={{ fontSize: 8, color: solo ? "#fca5a5" : "#94a3b8", fontWeight: 600, flexShrink: 0, marginLeft: 4 }}>{sizeLabel}</span>
-                      </div>
-                      {/* Bottom row: Class | Start time */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <ScheduleBlockJob charName={leadChar} />
-                        <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 600, flexShrink: 0 }}>{startTime}</span>
+                        <ScheduleBlockJob charName={p.members?.[0]?.charName} />
                       </div>
                     </div>
                   );
                 })}
+                {/* Drag preview */}
                 {editing && dragPreview && dragPreview.day === dayIdx && (() => {
-                  const visTop = (dragPreview.startSlot - visRange.start) * ROW_H;
-                  return <div style={{ position: "absolute", top: visTop, left: 3, right: 3, height: dragPreview.durSlots * ROW_H, borderRadius: 6, zIndex: 10, background: "rgba(37,99,235,.3)", border: `2px dashed ${ACCENT}`, boxShadow: `0 0 12px ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
+                  const visLeft = (dragPreview.startSlot - visRange.start) * COL_W;
+                  return <div style={{ position: "absolute", left: visLeft, top: 3, width: dragPreview.durSlots * COL_W, height: ROW_H - 6, borderRadius: 6, zIndex: 10, background: "rgba(37,99,235,.3)", border: `2px dashed ${ACCENT}`, boxShadow: `0 0 12px ${ACCENT}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", pointerEvents: "none" }}>
                     {dragging?.bosses?.[0]?.bossName} — {dragPreview.timeStr}
                   </div>;
                 })()}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+          {/* Reset line — vertical now */}
           {RESET_SLOT >= visRange.start && RESET_SLOT < visRange.end && (
-            <div style={{ position: "absolute", left: LABEL_W, right: 0, top: HEADER_H + (RESET_SLOT - visRange.start) * ROW_H, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
-              <span style={{ position: "absolute", right: 4, top: -13, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2 }}>0:00 UTC</span>
+            <div style={{ position: "absolute", top: 24, bottom: 0, left: 54 + (RESET_SLOT - visRange.start) * COL_W, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
+              <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
             </div>
           )}
         </div>
