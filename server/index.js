@@ -156,13 +156,13 @@ app.get("/auth/discord/callback", async (req, res) => {
           const p = parties[pid];
           if (p.members) {
             p.members = p.members.map(m => {
-              if (m.userId === d.username && m.userId !== d.id) {
+              if (m.userId !== d.id && m.userId?.toLowerCase() === d.username?.toLowerCase()) {
                 changed = true;
                 return { ...m, userId: d.id };
               }
               return m;
             });
-            if (p.leaderId === d.username) { p.leaderId = d.id; changed = true; }
+            if (p.leaderId !== d.id && p.leaderId?.toLowerCase() === d.username?.toLowerCase()) { p.leaderId = d.id; changed = true; }
           }
         }
         if (changed) db.prepare("UPDATE parties_store SET data = ? WHERE id = 1").run(JSON.stringify(parties));
