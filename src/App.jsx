@@ -1241,11 +1241,40 @@ function ShareView({ token }) {
   const [myParties, setMyParties] = useState(null);
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
+  const shareGridRef = useRef(null);
 
   useEffect(() => {
     fetch(`/api/share/${token}`).then(r => r.ok ? r.json() : Promise.reject()).then(setData).catch(() => setError(true));
     API.get("/api/me").then(d => { if (d) { setMe(d); API.get("/api/parties").then(p => setMyParties(p || {})).catch(() => {}); } }).catch(() => {});
   }, [token]);
+
+  // Shared bosses: boss names that appear in both owner's and viewer's parties
+  const sharedBossKeys = useMemo(() => {
+    if (!me || !myParties || !data) return new Set();
+    const partyList = Object.values(data.parties || {}).filter(p => !p.skipped);
+    const myBosses = new Set();
+    Object.values(myParties).forEach(p => {
+      if (p.skipped || !p.members?.some(m => m.userId === me.id)) return;
+      p.bosses?.forEach(b => myBosses.add(`${b.bossName}|${b.difficulty}`));
+    });
+    const shared = new Set();
+    partyList.forEach(p => {
+      p.bosses?.forEach(b => { if (myBosses.has(`${b.bossName}|${b.difficulty}`)) shared.add(p.id); });
+    });
+    return shared;
+  }, [me, myParties, data]);
+
+  // Scroll to current time on mount
+  useEffect(() => {
+    if (!data || !shareGridRef.current) return;
+    const now = new Date();
+    const viewerNow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+    const nowSlot = viewerNow.getHours() * 2 + viewerNow.getMinutes() / 30;
+    const ROW_H = 28;
+    const HEADER_H = 44;
+    const targetY = shareGridRef.current.offsetTop + HEADER_H + nowSlot * ROW_H - window.innerHeight / 2;
+    window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+  }, [data]);
 
   if (error) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
     <style>{globalCSS}</style>
@@ -1312,21 +1341,6 @@ function ShareView({ token }) {
   };
   const myConverted = compare ? convertMyAvail() : {};
 
-  // Shared bosses: boss names that appear in both owner's and viewer's parties
-  const sharedBossKeys = useMemo(() => {
-    if (!me || !myParties) return new Set();
-    const myBosses = new Set();
-    Object.values(myParties).forEach(p => {
-      if (p.skipped || !p.members?.some(m => m.userId === me.id)) return;
-      p.bosses?.forEach(b => myBosses.add(`${b.bossName}|${b.difficulty}`));
-    });
-    const shared = new Set();
-    partyList.forEach(p => {
-      p.bosses?.forEach(b => { if (myBosses.has(`${b.bossName}|${b.difficulty}`)) shared.add(p.id); });
-    });
-    return shared;
-  }, [me, myParties, partyList]);
-
   const isShared = (p) => sharedBossKeys.has(p.id);
 
   const fmtSlot = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
@@ -1334,16 +1348,6 @@ function ShareView({ token }) {
   const HEADER_H = 44;
   const ROW_H = 28;
   const resetSlot = (() => { const off = -new Date(now.toLocaleString("en-US", { timeZone: tz })).getTimezoneOffset(); return ((Math.round(-off / 30) % 48) + 48) % 48; })();
-  const shareGridRef = useRef(null);
-
-  // Scroll to current time on mount
-  useEffect(() => {
-    if (!shareGridRef.current) return;
-    const viewerNow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
-    const nowSlot = viewerNow.getHours() * 2 + viewerNow.getMinutes() / 30;
-    const targetY = shareGridRef.current.offsetTop + HEADER_H + nowSlot * ROW_H - window.innerHeight / 2;
-    window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
-  }, [data]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>
@@ -1470,9 +1474,6 @@ function ShareView({ token }) {
 
 /* ═══ MAIN APP ═══ */
 export default function App() {
-  // Check if we're on a /share/ route
-  const shareMatch = window.location.pathname.match(/^\/share\/([a-f0-9]+)$/);
-  if (shareMatch) return <ShareView token={shareMatch[1]} />;
   const [user, setUser] = useState(undefined);
   const [allUsers, setAllUsers] = useState([]);
   const [parties, setParties] = useState({});
@@ -1496,6 +1497,10 @@ export default function App() {
   })(); }, []);
 
   useEffect(() => { if (!user) return; const iv = setInterval(async () => { try { const p = await API.get("/api/parties"); if (p) setParties(p); const u = await API.get("/api/users"); if (u) setAllUsers(u); } catch {} }, 8000); return () => clearInterval(iv); }, [user]);
+
+  // Check if we're on a /share/ route — AFTER all hooks
+  const shareMatch = window.location.pathname.match(/^\/share\/([a-f0-9]+)$/);
+  if (shareMatch) return <ShareView token={shareMatch[1]} />;
 
   const save = async np => { setParties(np); try { await API.put("/api/parties", np); } catch {} };
   const handleCreate = async p => { await save({ ...parties, [p.id]: p }); setShowCreate(false); setCreateDefaults({}); setSelectedParty(p); setView("party"); };
