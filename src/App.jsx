@@ -977,12 +977,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           onDragOver={editing ? onGridDragOver : undefined} onDrop={editing ? onGridDrop : undefined} onDragLeave={editing ? onGridDragLeave : undefined}>
           <div style={{ width: DAY_LABEL_W + SLOT_COUNT * COL_W, position: "relative" }}>
           {/* Hour labels across top */}
-          <div style={{ display: "flex", marginLeft: DAY_LABEL_W, height: 20 }}>
-            {Array.from({ length: visSlots }, (_, vi) => {
-              const si = visRange.start + vi;
-              if (si % 2 !== 0) return null;
-              const h = Math.floor(si / 2);
-              return <div key={vi} style={{ width: COL_W * 2, flexShrink: 0, fontSize: 9, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px" }}>
+          <div style={{ position: "relative", marginLeft: DAY_LABEL_W, height: 20 }}>
+            {Array.from({ length: 24 }, (_, h) => {
+              const si = h * 2;
+              if (si < visRange.start || si >= visRange.end) return null;
+              return <div key={h} style={{ position: "absolute", left: (si - visRange.start) * COL_W, fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px", transform: "translateX(-50%)" }}>
                 {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
               </div>;
             })}
@@ -998,11 +997,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 {Array.from({ length: visSlots }, (_, vi) => {
                   const si = visRange.start + vi;
                   const hasA = isAvail(dayIdx, si);
-                  const is4hr = si % 8 === 0 && si > 0;
+                  const isHour = si % 2 === 0 && si > 0;
+                  const isReset = si === RESET_SLOT;
                   return <div key={vi} style={{
                     width: COL_W, height: ROW_H, flexShrink: 0,
                     background: hasA ? "rgba(34,197,94,.15)" : "rgba(20,24,41,.5)",
-                    borderRight: is4hr ? "1px solid rgba(255,255,255,.15)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.2)" : "1px solid rgba(30,36,64,.1)",
+                    borderRight: isReset ? "none" : isHour ? "1px dashed rgba(255,255,255,.18)" : "1px solid rgba(30,36,64,.08)",
                   }} />;
                 })}
                 {(byDay[dayIdx] || []).map(p => {
@@ -1031,10 +1031,13 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.3)` } : {}),
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <span style={{ fontSize: blockW > 80 ? 10 : 8, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                         <span style={{ fontSize: 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
-                        {blockW > 70 && <span style={{ fontSize: 7, color: "#94a3b8", flexShrink: 0 }}>{sizeLabel}</span>}
+                        <span style={{ fontSize: blockW > 80 ? 10 : 8, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
+                      {blockW > 55 && <div style={{ display: "flex", alignItems: "center", gap: 4, overflow: "hidden" }}>
+                        <span style={{ fontSize: 8, color: "rgba(255,255,255,.5)", fontWeight: 600 }}>{fmtSlot(startS)}</span>
+                        <span style={{ fontSize: 7, color: "#94a3b8" }}>{sizeLabel}</span>
+                      </div>}
                       {blockW > 60 && <ScheduleBlockJob charName={p.members?.[0]?.charName} />}
                     </div>
                   );
@@ -1049,8 +1052,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             </div>
           ))}
           {RESET_SLOT >= visRange.start && RESET_SLOT < visRange.end && (
-            <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + (RESET_SLOT - visRange.start) * COL_W, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 8 }}>
-              <span style={{ position: "absolute", top: -14, left: 4, fontSize: 7, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
+            <div style={{ position: "absolute", top: 20, bottom: 0, left: DAY_LABEL_W + (RESET_SLOT - visRange.start) * COL_W, width: 0, borderLeft: "2px solid rgba(239,68,68,.6)", pointerEvents: "none", zIndex: 8 }}>
+              <span style={{ position: "absolute", top: 4, left: 4, fontSize: 8, color: "#f87171", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", writingMode: "vertical-rl", letterSpacing: "0.5px", background: "rgba(11,14,26,.7)", padding: "3px 2px", borderRadius: 3 }}>0:00 UTC</span>
             </div>
           )}
           {/* Current time line */}
