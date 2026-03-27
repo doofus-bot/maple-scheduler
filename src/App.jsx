@@ -23,7 +23,14 @@ const BOSS_DROPS = {
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
 const BOSS_LEVEL_REQ = { Seren: 260, Kalos: 265, Adversary: 270, Kaling: 275, Limbo: 285, Baldrix: 290 };
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
-const DIFF_COLORS = { Easy: "#858585", Normal: "#32AAB0", Hard: "#B93062", Chaos: "#EA6C2B", Extreme: "#EA6C2B" };
+const DIFF_COLORS = { Easy: "#5c6e3a", Normal: "#2ea44f", Hard: "#d4578a", Chaos: "#8838c4", Extreme: "#c42828" };
+const DIFF_GRADIENTS = {
+  Easy: "linear-gradient(180deg, #7a8a44 0%, #4a5a24 100%)",
+  Normal: "linear-gradient(180deg, #38a855 0%, #1d6e30 100%)",
+  Hard: "linear-gradient(180deg, #c83068 0%, #8a1840 100%)",
+  Chaos: "linear-gradient(180deg, #9038cc 0%, #5a1a8a 100%)",
+  Extreme: "linear-gradient(180deg, #d43535 0%, #8a1a1a 100%)",
+};
 const ACCENT = "#2563eb", ACCENT_LIGHT = "rgba(37,99,235,0.15)", ACCENT_BORDER = "rgba(37,99,235,0.3)";
 const SOLO_COLOR = "#c45c5c", SOLO_BG = "rgba(196,92,92,0.18)", SOLO_BORDER = "rgba(196,92,92,0.35)";
 const BACKDROP = { background: "rgba(11,14,26,0.95)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(30,36,64,0.6)" };
@@ -156,6 +163,12 @@ function ScheduleBlockJob({ charName }) {
   const info = useCharInfo(charName);
   if (!info?.jobName) return null;
   return <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 500 }}>{info.jobName}</span>;
+}
+
+function DiffBadge({ difficulty, small }) {
+  const grad = DIFF_GRADIENTS[difficulty] || "linear-gradient(180deg, #555 0%, #333 100%)";
+  if (small) return <span style={{ fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 3, background: grad, color: "#fff", flexShrink: 0, textShadow: "0 1px 2px rgba(0,0,0,.5)", letterSpacing: "0.5px", border: "1px solid rgba(255,255,255,.15)" }}>{DIFF_ABBR[difficulty] || ""}</span>;
+  return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: grad, color: "#fff", flexShrink: 0, textShadow: "0 1px 2px rgba(0,0,0,.5)", letterSpacing: "0.5px", border: "1px solid rgba(255,255,255,.15)", boxShadow: "0 2px 4px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.15)" }}>{difficulty?.toUpperCase() || ""}</span>;
 }
 
 /* ═══ IGN POPUP ═══ */
@@ -1154,7 +1167,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.3)` } : {}),
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <span style={{ fontSize: tiny ? 6 : 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        <DiffBadge difficulty={b?.difficulty} small />
                         <span style={{ fontSize: tiny ? 8 : 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
                       {!tiny && blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
