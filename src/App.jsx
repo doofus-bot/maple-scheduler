@@ -773,6 +773,7 @@ function ProfileModal({ user, onClose, onSave }) {
   const [deletedChars, setDeletedChars] = useState([]);
   const [notifEnabled, setNotifEnabled] = useState(user.notifications?.enabled || false);
   const [notifTimings, setNotifTimings] = useState(user.notifications?.timings || [60, 30, 5]);
+  const [notifSolos, setNotifSolos] = useState(user.notifications?.solos || false);
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
   const [mode, setMode] = useState(null);
@@ -786,7 +787,7 @@ function ProfileModal({ user, onClose, onSave }) {
     setSaving(true);
     saveTimer.current = setTimeout(() => { onSave(data); setSaving(false); }, 400);
   }, [onSave]);
-  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail, notifications: { enabled: notifEnabled, timings: notifTimings } }); }, [tz, chars, avail, notifEnabled, notifTimings]);
+  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail, notifications: { enabled: notifEnabled, timings: notifTimings, solos: notifSolos } }); }, [tz, chars, avail, notifEnabled, notifTimings, notifSolos]);
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => {
@@ -933,6 +934,14 @@ function ProfileModal({ user, onClose, onSave }) {
               ))}
             </div>
           )}
+          {/* Solo boss notifications */}
+          {notifEnabled && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <button onClick={() => setNotifSolos(!notifSolos)}
+              style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${notifSolos ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: notifSolos ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifSolos ? "#10b981" : "#64748b" }}>
+              {notifSolos ? "✓ Solo reminders" : "Solo reminders off"}
+            </button>
+            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Notify at start time only for solo bosses</span>
+          </div>}
         </div>
       </div>
     </div></div>
