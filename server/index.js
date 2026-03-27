@@ -353,8 +353,10 @@ db.exec(`
     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
-// Clean old entries (>7 days)
-try { db.prepare("DELETE FROM notifications_sent WHERE sent_at < datetime('now', '-7 days')").run(); } catch {}
+// Clean old entries (>24 hours — weekly bosses get fresh notifications each week)
+try { db.prepare("DELETE FROM notifications_sent WHERE sent_at < datetime('now', '-24 hours')").run(); } catch {}
+// Clear all on deploy to reset from key format changes
+try { db.prepare("DELETE FROM notifications_sent").run(); } catch {}
 
 const NOTIFY_INTERVALS = [60, 30, 15, 10, 5, 0]; // minutes before boss time
 
@@ -468,7 +470,7 @@ function runNotificationCheck() {
 
           // Is it time? (within 1 minute window)
           if (notifyDay === nowDay && Math.abs(nowMin - notifyMin) <= 1) {
-            const sentKey = `${pid}_${realDiscordId}_${minsBefore}_${bossDay}`;
+            const sentKey = `${pid}_${realDiscordId}_${minsBefore}_${bossDay}_${bossUTCMin}`;
             const already = db.prepare("SELECT id FROM notifications_sent WHERE id = ?").get(sentKey);
             if (already) continue;
 
