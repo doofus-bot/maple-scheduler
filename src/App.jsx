@@ -696,7 +696,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click a time slot{timeAnchor ? ` — start: ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}. Click end time (same day)` : ""}</div>}
         {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto" }}
-          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { setHoverCellPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
+          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
           {/* Hour labels */}
           <div style={{ display: "flex", marginLeft: 50, height: 20 }}>
             {Array.from({ length: 24 }, (_, h) => (
