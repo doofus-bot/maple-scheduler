@@ -771,6 +771,8 @@ function ProfileModal({ user, onClose, onSave }) {
   const [newChar, setNewChar] = useState("");
   const [avail, setAvail] = useState(user.availability || {});
   const [deletedChars, setDeletedChars] = useState([]);
+  const [notifEnabled, setNotifEnabled] = useState(user.notifications?.enabled || false);
+  const [notifTimings, setNotifTimings] = useState(user.notifications?.timings || [60, 30, 5]);
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
   const [mode, setMode] = useState(null);
@@ -784,7 +786,7 @@ function ProfileModal({ user, onClose, onSave }) {
     setSaving(true);
     saveTimer.current = setTimeout(() => { onSave(data); setSaving(false); }, 400);
   }, [onSave]);
-  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail }); }, [tz, chars, avail]);
+  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail, notifications: { enabled: notifEnabled, timings: notifTimings } }); }, [tz, chars, avail, notifEnabled, notifTimings]);
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => {
@@ -888,6 +890,27 @@ function ProfileModal({ user, onClose, onSave }) {
           <div style={{ position: "absolute", top: 20, bottom: 0, left: 50 + RESET_SLOT * 14, width: 0, borderLeft: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>0:00 UTC</span>
           </div>
+        </div>
+
+        {/* Notifications */}
+        <div style={{ marginTop: 20 }}>
+          <label style={S.label}>DM Notifications</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <button onClick={() => setNotifEnabled(!notifEnabled)}
+              style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${notifEnabled ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", fontSize: 12, background: notifEnabled ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifEnabled ? "#10b981" : "#64748b" }}>
+              {notifEnabled ? "✓ Enabled" : "Disabled"}
+            </button>
+            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Receive Discord DMs before your boss runs</span>
+          </div>
+          {notifEnabled && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[{ label: "1 hour", mins: 60 }, { label: "30 min", mins: 30 }, { label: "15 min", mins: 15 }, { label: "10 min", mins: 10 }, { label: "5 min", mins: 5 }, { label: "At start", mins: 0 }].map(opt => {
+              const active = notifTimings.includes(opt.mins);
+              return <button key={opt.mins} onClick={() => setNotifTimings(prev => active ? prev.filter(t => t !== opt.mins) : [...prev, opt.mins])}
+                style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${active ? "rgba(37,99,235,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: active ? "rgba(37,99,235,.15)" : "rgba(255,255,255,.03)", color: active ? ACCENT : "#64748b" }}>
+                {opt.label}
+              </button>;
+            })}
+          </div>}
         </div>
       </div>
     </div></div>
