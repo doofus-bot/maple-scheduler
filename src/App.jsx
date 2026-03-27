@@ -220,8 +220,8 @@ function PartyHoverCard({ party, currentUserId, style: pos }) {
     <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...pos }}>
       <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 160, maxWidth: 240 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <DiffBadge difficulty={b?.difficulty} small />
           <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-          <DiffBadge difficulty={b?.difficulty} />
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>{timeStr}</div>
         {me && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
