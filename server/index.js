@@ -378,7 +378,19 @@ async function sendDiscordDM(userId, message) {
       headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ content: message }),
     });
-    if (!msgRes.ok) console.error(`DM send failed for ${userId}:`, msgRes.status);
+    if (!msgRes.ok) { console.error(`DM send failed for ${userId}:`, msgRes.status); return; }
+    const msgData = await msgRes.json();
+    // Auto-delete after 30 minutes
+    if (msgData.id) {
+      setTimeout(async () => {
+        try {
+          await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages/${msgData.id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bot ${token}` },
+          });
+        } catch {}
+      }, 30 * 60 * 1000);
+    }
   } catch (err) { console.error(`DM error for ${userId}:`, err.message); }
 }
 
