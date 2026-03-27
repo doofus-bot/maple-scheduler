@@ -942,6 +942,21 @@ function ProfileModal({ user, onClose, onSave }) {
             </button>
             <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Notify at start time only for solo bosses</span>
           </div>}
+          {/* Test notification */}
+          {notifEnabled && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <button onClick={async () => {
+              try {
+                const r = await fetch("/api/me/test-notification", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
+                const d = await r.json();
+                if (d.success) alert("✅ Test DM sent! Check your Discord.");
+                else alert("❌ Failed: " + (d.step || "") + " " + (d.status || "") + " " + (d.body || d.error || ""));
+              } catch (e) { alert("❌ Error: " + e.message); }
+            }}
+              style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(245,158,11,.3)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: "rgba(245,158,11,.1)", color: "#f59e0b" }}>
+              🧪 Test DM
+            </button>
+            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Send a test message to your Discord</span>
+          </div>}
         </div>
       </div>
     </div></div>
