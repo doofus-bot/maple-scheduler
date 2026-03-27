@@ -303,6 +303,35 @@ app.get("/api/nexon/:name", async (req, res) => {
 });
 
 /* ════════════════════════════════════════
+   TEST NOTIFICATION ENDPOINT
+   ════════════════════════════════════════ */
+app.post("/api/me/test-notification", requireAuth, async (req, res) => {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return res.status(500).json({ error: "DISCORD_BOT_TOKEN not set" });
+  try {
+    const msg = `🧪 **Test notification from Maple Scheduler!**\n\nIf you see this, DM notifications are working for your account.\n\nBot token present: ✅\nYour Discord ID: ${req.user.id}`;
+    // Open DM channel
+    const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: req.user.id }),
+    });
+    const chBody = await chRes.text();
+    if (!chRes.ok) return res.json({ success: false, step: "open_dm", status: chRes.status, body: chBody });
+    const ch = JSON.parse(chBody);
+    // Send message
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: msg }),
+    });
+    const msgBody = await msgRes.text();
+    if (!msgRes.ok) return res.json({ success: false, step: "send_msg", status: msgRes.status, body: msgBody });
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, step: "exception", error: err.message }); }
+});
+
+/* ════════════════════════════════════════
    SERVE FRONTEND
    ════════════════════════════════════════ */
 // Always serve public/ for logo.png etc
@@ -381,11 +410,18 @@ function runNotificationCheck() {
       const diff = party.bosses?.[0]?.difficulty || "";
       const duration = party.duration || 30;
 
+      const isSolo = (party.members?.length || 0) <= 1;
+
       for (const member of (party.members || [])) {
         const userId = member.userId;
         const userPref = userMap[userId];
         if (!userPref?.notifs?.enabled) continue;
-        const timings = userPref.notifs.timings || [];
+
+        // Skip solos unless user opted in
+        if (isSolo && !userPref.notifs.solos) continue;
+
+        // For solos, only notify at start time (0 min before)
+        const timings = isSolo ? [0] : (userPref.notifs.timings || []);
 
         for (const minsBefore of timings) {
 
