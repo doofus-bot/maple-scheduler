@@ -21,6 +21,7 @@ const BOSS_DROPS = {
   "Other": [],
 };
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
+const BOSS_LEVEL_REQ = { Seren: 260, Kalos: 265, Adversary: 270, Kaling: 275, Limbo: 285, Baldrix: 290 };
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
 const DIFF_COLORS = { Easy: "#858585", Normal: "#32AAB0", Hard: "#B93062", Chaos: "#EA6C2B", Extreme: "#EA6C2B" };
 const ACCENT = "#2563eb", ACCENT_LIGHT = "rgba(37,99,235,0.15)", ACCENT_BORDER = "rgba(37,99,235,0.3)";
@@ -719,6 +720,7 @@ function ProfileModal({ user, onClose, onSave }) {
   const [chars, setChars] = useState(user.characters || []);
   const [newChar, setNewChar] = useState("");
   const [avail, setAvail] = useState(user.availability || {});
+  const [deletedChars, setDeletedChars] = useState([]);
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
   const [mode, setMode] = useState(null);
@@ -735,7 +737,16 @@ function ProfileModal({ user, onClose, onSave }) {
   useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail }); }, [tz, chars, avail]);
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
-  const rmChar = i => setChars(p => p.filter((_, j) => j !== i));
+  const rmChar = i => {
+    const removed = chars[i];
+    setDeletedChars(prev => [...prev, { name: removed, deletedAt: Date.now() }]);
+    setChars(p => p.filter((_, j) => j !== i));
+  };
+  const restoreChar = (name) => {
+    setDeletedChars(prev => prev.filter(d => d.name !== name));
+    setChars(p => p.includes(name) ? p : [...p, name]);
+  };
+  const permDeleteChar = (name) => setDeletedChars(prev => prev.filter(d => d.name !== name));
   const getSlot = (e) => {
     if (!gridRef.current) return null;
     const r = gridRef.current.getBoundingClientRect();
@@ -784,6 +795,17 @@ function ProfileModal({ user, onClose, onSave }) {
               </div>
             ))}
           </div> : <div style={{ fontSize: 13, color: "#475569" }}>No characters added yet.</div>}
+          {deletedChars.length > 0 && <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 8, border: "1px dashed rgba(239,68,68,.2)", background: "rgba(239,68,68,.03)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Fredoka',sans-serif", marginBottom: 6 }}>Recently Deleted</div>
+            {deletedChars.map(d => (
+              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                <CharAvatar name={d.name} size={20} />
+                <span style={{ flex: 1, fontSize: 12, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textDecoration: "line-through" }}>{d.name}</span>
+                <button onClick={() => restoreChar(d.name)} style={{ padding: "2px 10px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Restore</button>
+                <button onClick={() => permDeleteChar(d.name)} style={{ padding: "2px 6px", borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 10 }}>{"\u2715"}</button>
+              </div>
+            ))}
+          </div>}
         </div>
         <label style={S.label}>Availability</label>
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "auto" }}
@@ -1259,6 +1281,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
   const [showManage, setShowManage] = useState(false);
+  const [unlocked, setUnlocked] = useState({});
   const PER_PAGE = 6;
   const totalPages = Math.ceil(allChars.length / PER_PAGE);
   const chars = allChars.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
@@ -1303,8 +1326,21 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
               const p = find(cn, bn);
               const skip = findSkip(cn, bn);
               const isSkipped = skip && !p;
+              const lvlReq = BOSS_LEVEL_REQ[bn];
+              const charLevel = charInfoCache[cn]?.level || 0;
+              const isLocked = lvlReq && charLevel > 0 && charLevel < lvlReq && !unlocked[`${cn}|${bn}`] && !p && !isSkipped;
               return (
-                <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : "transparent" }}>
+                <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : isLocked ? "rgba(0,0,0,.15)" : "transparent", position: "relative" }}>
+                  {isLocked ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Lv.{lvlReq}</span>
+                      <button onClick={() => setUnlocked(prev => ({ ...prev, [`${cn}|${bn}`]: true }))}
+                        title={`Requires Lv.${lvlReq} (currently ${charLevel})`}
+                        style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, border: "1px solid rgba(100,116,139,.2)", background: "rgba(100,116,139,.08)", color: "#64748b", cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>
+                        🔓 Unlock
+                      </button>
+                    </div>
+                  ) : (
                   <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "center" }}>
                     {/* Status */}
                     {p && (() => {
@@ -1348,6 +1384,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                       </button>}
                     </div>
                   </div>
+                  )}
                 </td>
               );
             })}</tr>)}</tbody>
