@@ -395,9 +395,13 @@ function runNotificationCheck() {
     // Load all users with notification prefs
     const users = db.prepare("SELECT id, username, settings, timezone FROM users").all();
     const userMap = {};
+    const usernameMap = {};
     users.forEach(u => {
       const s = JSON.parse(u.settings || "{}");
-      if (s.notifications?.enabled) userMap[u.id] = { ...u, notifs: s.notifications };
+      if (s.notifications?.enabled) {
+        userMap[u.id] = { ...u, notifs: s.notifications };
+        if (u.username) usernameMap[u.username.toLowerCase()] = userMap[u.id];
+      }
     });
 
     // Get the local timezone offset so we can convert stored local times to UTC
@@ -444,8 +448,9 @@ function runNotificationCheck() {
 
       for (const member of (party.members || [])) {
         const userId = member.userId;
-        const userPref = userMap[userId];
+        const userPref = userMap[userId] || usernameMap[userId?.toLowerCase()];
         if (!userPref?.notifs?.enabled) continue;
+        const realDiscordId = userPref.id; // always use actual Discord ID for DMs
 
         // Skip solos unless user opted in
         if (isSolo && !userPref.notifs.solos) continue;
@@ -463,7 +468,7 @@ function runNotificationCheck() {
 
           // Is it time? (within 1 minute window)
           if (notifyDay === nowDay && Math.abs(nowMin - notifyMin) <= 1) {
-            const sentKey = `${pid}_${userId}_${minsBefore}_${bossDay}`;
+            const sentKey = `${pid}_${realDiscordId}_${minsBefore}_${bossDay}`;
             const already = db.prepare("SELECT id FROM notifications_sent WHERE id = ?").get(sentKey);
             if (already) continue;
 
@@ -501,9 +506,9 @@ function runNotificationCheck() {
             msg += `\n\n🔗 [View Party](${siteUrl}/party/${pid})`;
 
             // Send and mark as sent
-            sendDiscordDM(userId, msg);
+            sendDiscordDM(realDiscordId, msg);
             db.prepare("INSERT OR IGNORE INTO notifications_sent (id) VALUES (?)").run(sentKey);
-            console.log(`📨 Notified ${userId} for ${diff} ${bossName} (${minsBefore}min before)`);
+            console.log(`📨 Notified ${realDiscordId} for ${diff} ${bossName} (${minsBefore}min before)`);
           }
         }
       }
