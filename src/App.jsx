@@ -916,9 +916,10 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const ROW_H = Math.max(20, Math.min(36, Math.floor(maxGridH / SLOT_COUNT)));
   const gridH = SLOT_COUNT * ROW_H;
   const [nowSlot, setNowSlot] = useState(() => { const n = new Date(); return n.getHours() * 2 + n.getMinutes() / 30; });
+  const [todayDay, setTodayDay] = useState(() => (new Date().getDay() + 6) % 7); // 0=Mon..6=Sun
 
   useEffect(() => {
-    const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + n.getMinutes() / 30); }, 15000);
+    const iv = setInterval(() => { const n = new Date(); setNowSlot(n.getHours() * 2 + n.getMinutes() / 30); setTodayDay((n.getDay() + 6) % 7); }, 15000);
     return () => clearInterval(iv);
   }, []);
 
@@ -1146,11 +1147,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           {/* Sticky day headers */}
           <div style={{ display: "flex", height: HEADER_H, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
             <div style={{ width: LABEL_W, flexShrink: 0 }} />
-            {DAY_ORDER.map(di => (
-              <div key={di} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
-                {DAYS_SHORT[di]}<div style={{ fontSize: 10, color: "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[di]?.length || 0} boss{byDay[di]?.length !== 1 ? "es" : ""}</div>
-              </div>
-            ))}
+            {DAY_ORDER.map(di => {
+              const isToday = di === todayDay;
+              return <div key={di} style={{ flex: 1, textAlign: "center", padding: "6px 0", fontSize: 13, fontWeight: 700, color: isToday ? "#fff" : "#e2e8f0", fontFamily: "'Fredoka',sans-serif", borderBottom: "1px solid rgba(30,36,64,.6)", ...(isToday ? { background: ACCENT, borderRadius: "6px 6px 0 0", margin: "0 1px" } : {}) }}>
+                {DAYS_SHORT[di]}<div style={{ fontSize: 10, color: isToday ? "rgba(255,255,255,.7)" : "#64748b", fontWeight: 400, marginTop: 1 }}>{byDay[di]?.length || 0} boss{byDay[di]?.length !== 1 ? "es" : ""}</div>
+              </div>;
+            })}
           </div>
           <div style={{ display: "flex", height: gridH }}>
             {/* Time labels */}
@@ -1164,16 +1166,18 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               })}
             </div>
             {/* Day columns */}
-            {DAY_ORDER.map(dayIdx => (
-              <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.06)" }}>
+            {DAY_ORDER.map(dayIdx => {
+              const isToday = dayIdx === todayDay;
+              return <div key={dayIdx} style={{ flex: 1, position: "relative", borderLeft: isToday ? "2px solid rgba(255,255,255,.35)" : "1px solid rgba(255,255,255,.06)", borderRight: isToday ? "2px solid rgba(255,255,255,.35)" : "none" }}>
                 {/* Background cells */}
                 {Array.from({ length: SLOT_COUNT }, (_, si) => {
                   const hasA = isAvail(dayIdx, si);
                   const isHour = si % 2 === 0 && si > 0;
                   const isReset = si === RESET_SLOT;
+                  const todayTint = isToday && !hasA ? "rgba(255,255,255,.04)" : "";
                   return <div key={si} style={{
                     position: "absolute", top: si * ROW_H, left: 0, right: 0, height: ROW_H,
-                    background: hasA ? "rgba(34,197,94,.15)" : "rgba(20,24,41,.5)",
+                    background: hasA ? "rgba(34,197,94,.15)" : todayTint || "rgba(20,24,41,.5)",
                     borderTop: isReset ? "none" : isHour ? "1px dashed rgba(255,255,255,.12)" : "none",
                   }} />;
                 })}
@@ -1222,8 +1226,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                     {dragging?.bosses?.[0]?.bossName}
                   </div>;
                 })()}
-              </div>
-            ))}
+              </div>;
+            })}
           </div>
           {/* Reset line */}
           {RESET_SLOT >= 0 && RESET_SLOT < 48 && (
