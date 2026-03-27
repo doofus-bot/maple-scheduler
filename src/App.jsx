@@ -185,17 +185,17 @@ function DiffBadge({ difficulty, small }) {
   const abbr = DIFF_ABBR[difficulty] || "";
   const full = difficulty?.toUpperCase() || "";
   const label = small ? abbr : full;
-  const sz = small ? { fontSize: 7, padding: "1px 4px", borderRadius: 3 } : { fontSize: 10, padding: "2px 8px", borderRadius: 4 };
-  const base = { ...sz, fontWeight: 800, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
+  const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : { fontSize: 10, padding: "2px 8px", borderRadius: 4 };
+  const base = { ...sz, fontWeight: 900, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
 
   if (difficulty === "Chaos") {
-    return <span style={{ ...base, background: bg, border: "1px solid #CAA78A", position: "relative", overflow: "hidden" }}>
-      <span style={{ backgroundImage: "linear-gradient(135deg,#DCBA87,#CAA78A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{label}</span>
+    return <span style={{ ...base, background: bg, border: "2px solid #CAA78A", position: "relative", overflow: "hidden" }}>
+      <span style={{ backgroundImage: "linear-gradient(135deg,#DCBA87,#CAA78A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: 900 }}>{label}</span>
     </span>;
   }
   if (difficulty === "Extreme") {
-    return <span style={{ ...base, background: bg, border: "1px solid #C03655", position: "relative", overflow: "hidden" }}>
-      <span style={{ backgroundImage: "linear-gradient(135deg,#ED7421,#A63647)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{label}</span>
+    return <span style={{ ...base, background: bg, border: "2px solid #C03655", position: "relative", overflow: "hidden" }}>
+      <span style={{ backgroundImage: "linear-gradient(135deg,#ED7421,#A63647)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: 900 }}>{label}</span>
     </span>;
   }
   return <span style={{ ...base, background: bg, color: "#fff", border: "none" }}>{label}</span>;
@@ -1462,7 +1462,7 @@ function LoginPage() {
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
     <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse at center,transparent 20%,rgba(0,0,0,.7) 100%)", pointerEvents: "none" }} />
     <div style={{ textAlign: "center", padding: 40, background: "rgba(20,24,41,.85)", border: "1px solid #1e2440", borderRadius: 20, backdropFilter: "blur(12px)", boxShadow: "0 24px 80px rgba(0,0,0,.4)", animation: "slideUp .3s ease", position: "relative", zIndex: 1 }}>
-      <img src="/logo.png?v=3" alt="" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
+      <img src="/logo.png?v=4" alt="" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
       <h1 style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Maple Scheduler</h1>
       <p style={{ fontSize: 14, color: "#64748b", marginBottom: 28, maxWidth: 300 }}>Organize your GMS bossing parties!</p>
       <a href="/auth/discord" style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 28px", borderRadius: 10, textDecoration: "none", background: "#5865F2", color: "#fff", fontWeight: 600, fontSize: 15, boxShadow: "0 4px 20px rgba(88,101,242,.4)" }}>
@@ -1600,7 +1600,7 @@ function ShareView({ token }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <img src="/logo.png?v=3" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
+            <img src="/logo.png?v=4" alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "contain" }} />
             <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span>
           </a>
           <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Viewing {owner.username}'s schedule</span>
@@ -1850,7 +1850,7 @@ export default function App() {
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "radial-gradient(ellipse at center,rgba(0,0,0,.2) 0%,rgba(0,0,0,.65) 100%)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=3" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=4" alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
