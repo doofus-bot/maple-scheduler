@@ -212,8 +212,8 @@ function DiffBadge({ difficulty, small, medium, inline }) {
 /* ═══ PARTY HOVER CARD ═══ */
 function PartyHoverCard({ party, currentUserId, style: pos }) {
   const b = party.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
-  const fmtS = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-  const timeStr = party.utcDay != null ? (() => { const ss = party.utcHour * 2 + (party.utcMin >= 30 ? 1 : 0); const dur = Math.max(1, Math.ceil((party.duration || 30) / 30)); return `${DAYS_SHORT[party.utcDay]} ${fmtS(ss)} – ${fmtS(Math.min(ss + dur, 48))}`; })() : "Unscheduled";
+  const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+  const timeStr = party.utcDay != null ? (() => { const startMin = party.utcHour * 60 + party.utcMin; const endMin = startMin + (party.duration || 30); const eH = Math.floor(endMin / 60) % 24; const eM = endMin % 60; return `${DAYS_SHORT[party.utcDay]} ${fmtTime(party.utcHour, party.utcMin)} – ${fmtTime(eH, eM)}`; })() : "Unscheduled";
   const me = party.members?.find(m => m.userId === currentUserId);
   const others = party.members?.filter(m => m.userId !== currentUserId) || [];
   return (
@@ -902,7 +902,7 @@ function ProfileModal({ user, onClose, onSave }) {
             </button>
             <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Receive Discord DMs before your boss runs</span>
           </div>
-          {notifEnabled && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {notifEnabled && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {[{ label: "1 hour", mins: 60 }, { label: "30 min", mins: 30 }, { label: "15 min", mins: 15 }, { label: "10 min", mins: 10 }, { label: "5 min", mins: 5 }, { label: "At start", mins: 0 }].map(opt => {
               const active = notifTimings.includes(opt.mins);
               return <button key={opt.mins} onClick={() => setNotifTimings(prev => active ? prev.filter(t => t !== opt.mins) : [...prev, opt.mins])}
@@ -910,7 +910,29 @@ function ProfileModal({ user, onClose, onSave }) {
                 {opt.label}
               </button>;
             })}
+            {/* Custom minutes */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input type="number" min="1" max="120" placeholder="min" style={{ ...S.input, width: 52, fontSize: 11, padding: "5px 6px", textAlign: "center" }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    const v = parseInt(e.target.value);
+                    if (v > 0 && v <= 120 && !notifTimings.includes(v)) { setNotifTimings(prev => [...prev, v]); e.target.value = ""; }
+                  }
+                }} />
+              <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>+ custom</span>
+            </div>
           </div>}
+          {/* Show active custom timings as removable pills */}
+          {notifEnabled && notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+              {notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).sort((a, b) => b - a).map(t => (
+                <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 5, background: "rgba(37,99,235,.15)", border: "1px solid rgba(37,99,235,.3)", fontSize: 10, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>
+                  {t}m
+                  <button onClick={() => setNotifTimings(prev => prev.filter(x => x !== t))} style={{ background: "none", border: "none", cursor: "pointer", color: "#f87171", fontSize: 10, padding: 0, lineHeight: 1 }}>{"\u2715"}</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div></div>
