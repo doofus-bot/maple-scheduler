@@ -192,7 +192,7 @@ function DiffBadge({ difficulty, small, inline }) {
   }
 
   const label = small ? abbr : full;
-  const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : { fontSize: 10, padding: "2px 8px", borderRadius: 4 };
+  const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : { fontSize: 13, padding: "4px 12px", borderRadius: 5 };
   const base = { ...sz, fontWeight: 900, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
 
   if (difficulty === "Chaos") {
@@ -1418,9 +1418,9 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
                         onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
                         onMouseLeave={() => setHoverParty(null)}
-                        style={{ padding: "3px 6px", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center",
-                          background: "rgba(11,14,26,.4)", border: `1px solid ${solo ? "rgba(255,255,255,.4)" : dc + "44"}` }}>
-                        <DiffBadge difficulty={b?.difficulty} small />
+                        style={{ padding: 0, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center",
+                          background: "transparent", border: "none" }}>
+                        <DiffBadge difficulty={b?.difficulty} />
                       </button>;
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
