@@ -180,7 +180,7 @@ function ScheduleBlockJob({ charName }) {
   return <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 500 }}>{info.jobName}</span>;
 }
 
-function DiffBadge({ difficulty, small, inline }) {
+function DiffBadge({ difficulty, small, medium, inline }) {
   const bg = DIFF_GRADIENTS[difficulty] || "#555";
   const abbr = DIFF_ABBR[difficulty] || "";
   const full = difficulty?.toUpperCase() || "";
@@ -191,8 +191,8 @@ function DiffBadge({ difficulty, small, inline }) {
     return <span style={{ fontSize: 8, fontWeight: 900, padding: "1px 4px", borderRadius: 3, background: bg, color: (difficulty === "Chaos" || difficulty === "Extreme") ? dc : "#fff", border: "none", flexShrink: 0, lineHeight: 1.3, display: "inline-block" }}>{abbr}</span>;
   }
 
-  const label = small ? abbr : full;
-  const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : { fontSize: 13, padding: "4px 12px", borderRadius: 5 };
+  const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : medium ? { fontSize: 14, padding: "4px 10px", borderRadius: 5 } : { fontSize: 13, padding: "4px 12px", borderRadius: 5 };
+  const label = (small || medium) ? abbr : full;
   const base = { ...sz, fontWeight: 900, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
 
   if (difficulty === "Chaos") {
@@ -1413,14 +1413,13 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     </button>}
                     {/* Status */}
                     {p && (() => {
-                      const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
+                      const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
                       return <button onClick={() => onClickParty(p)}
                         onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
                         onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
                         onMouseLeave={() => setHoverParty(null)}
-                        style={{ padding: 0, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center",
-                          background: "transparent", border: "none" }}>
-                        <DiffBadge difficulty={b?.difficulty} />
+                        style={{ padding: 0, borderRadius: 6, cursor: "pointer", background: "transparent", border: "none" }}>
+                        <DiffBadge difficulty={b?.difficulty} medium />
                       </button>;
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
