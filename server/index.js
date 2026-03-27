@@ -400,16 +400,46 @@ function runNotificationCheck() {
       if (s.notifications?.enabled) userMap[u.id] = { ...u, notifs: s.notifications };
     });
 
+    // Get the local timezone offset so we can convert stored local times to UTC
+    // Party times are stored as local hours/mins (named utcHour/utcMin but actually local)
+    const offsetMin = new Date().getTimezoneOffset(); // minutes to add to local to get UTC
+    // On Railway (UTC server), offsetMin = 0, so we need the user's/site's offset instead
+    // Since all parties are created from the same UI using the browser's local time,
+    // we figure out the offset from the current UTC time vs what a PT user would see
+    // Actually: the frontend stores times relative to the user's LOCAL clock.
+    // The simplest fix: for each party, figure out who created it and use their timezone.
+    // But since all users share parties, we use the site-wide convention:
+    // The schedule grid uses the BROWSER's local timezone, so party times = browser local.
+    // The party creator's timezone is stored on their user record.
+    // For now, use the party leader's timezone to convert.
+
     const siteUrl = process.env.SITE_URL || "https://maplescheduler.com";
 
     for (const [pid, party] of Object.entries(parties)) {
       if (party.skipped || party.utcDay == null) continue;
-      const bossStartMin = party.utcHour * 60 + party.utcMin;
-      const bossDay = party.utcDay;
+
+      // Convert stored local time to actual UTC
+      // Find leader's timezone (or fall back to first member's, or America/New_York)
+      const leaderId = party.leaderId;
+      const leaderUser = users.find(u => u.id === leaderId);
+      const leaderTZ = leaderUser?.timezone || "America/New_York";
+
+      // Calculate the offset: create a date in the leader's timezone and compare to UTC
+      const refDate = new Date();
+      const localStr = refDate.toLocaleString("en-US", { timeZone: leaderTZ });
+      const localDate = new Date(localStr);
+      const tzOffsetMs = refDate.getTime() - localDate.getTime();
+      const tzOffsetMins = Math.round(tzOffsetMs / 60000);
+
+      // Stored time is local, convert to UTC by adding the offset
+      let bossUTCMin = (party.utcHour * 60 + party.utcMin) + tzOffsetMins;
+      let bossDay = party.utcDay;
+      while (bossUTCMin >= 24 * 60) { bossUTCMin -= 24 * 60; bossDay = (bossDay + 1) % 7; }
+      while (bossUTCMin < 0) { bossUTCMin += 24 * 60; bossDay = (bossDay - 1 + 7) % 7; }
+
       const bossName = party.bosses?.[0]?.bossName || "Boss";
       const diff = party.bosses?.[0]?.difficulty || "";
       const duration = party.duration || 30;
-
       const isSolo = (party.members?.length || 0) <= 1;
 
       for (const member of (party.members || [])) {
@@ -425,10 +455,11 @@ function runNotificationCheck() {
 
         for (const minsBefore of timings) {
 
-          // Calculate when this notification should fire
-          let notifyMin = bossStartMin - minsBefore;
+          // Calculate when this notification should fire (in UTC)
+          let notifyMin = bossUTCMin - minsBefore;
           let notifyDay = bossDay;
           if (notifyMin < 0) { notifyMin += 24 * 60; notifyDay = (notifyDay - 1 + 7) % 7; }
+          if (notifyMin >= 24 * 60) { notifyMin -= 24 * 60; notifyDay = (notifyDay + 1) % 7; }
 
           // Is it time? (within 1 minute window)
           if (notifyDay === nowDay && Math.abs(nowMin - notifyMin) <= 1) {
@@ -438,14 +469,13 @@ function runNotificationCheck() {
 
             // Calculate Unix timestamp for the boss start
             const bossDate = new Date(now);
-            // Find the next occurrence of bossDay
             const daysUntil = ((bossDay - nowDay) % 7 + 7) % 7;
-            bossDate.setUTCDate(bossDate.getUTCDate() + (daysUntil === 0 && nowMin > bossStartMin + 2 ? 7 : daysUntil));
-            bossDate.setUTCHours(party.utcHour, party.utcMin, 0, 0);
+            bossDate.setUTCDate(bossDate.getUTCDate() + (daysUntil === 0 && nowMin > bossUTCMin + 2 ? 7 : daysUntil));
+            bossDate.setUTCHours(Math.floor(bossUTCMin / 60), bossUTCMin % 60, 0, 0);
             const startUnix = Math.floor(bossDate.getTime() / 1000);
             const endUnix = startUnix + duration * 60;
 
-            // Reset relation
+            // Reset relation (use original stored time for display)
             const minsFromReset = party.utcHour * 60 + party.utcMin;
             const minsToReset = 24 * 60 - minsFromReset;
             const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
@@ -464,7 +494,7 @@ function runNotificationCheck() {
             } else {
               msg = `🍄 **${diff} ${bossName}** starts in **${minsBefore} minutes**!`;
             }
-            msg += `\n\n**${resetStr}**`;
+            msg += `\n**${resetStr}**`;
             msg += `\n<t:${startUnix}:R> — <t:${startUnix}:F>`;
             msg += `\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
             msg += `\n\n👤 **${member.charName || "—"}** | ${partySize > 1 ? partySize + "p — " + memberNames : "Solo"}`;
@@ -473,6 +503,7 @@ function runNotificationCheck() {
             // Send and mark as sent
             sendDiscordDM(userId, msg);
             db.prepare("INSERT OR IGNORE INTO notifications_sent (id) VALUES (?)").run(sentKey);
+            console.log(`📨 Notified ${userId} for ${diff} ${bossName} (${minsBefore}min before)`);
           }
         }
       }
