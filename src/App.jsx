@@ -841,28 +841,35 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   }, [partyList, displayList]);
 
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
-  const getStartSlot = (p) => p.utcHour * 2 + (p.utcMin >= 30 ? 1 : 0);
+  // getStartSlot returns fractional slots: 15min = x.5 within a slot
+  const getStartSlot = (p) => p.utcHour * 2 + Math.floor(p.utcMin / 30) + ((p.utcMin % 30 >= 15) ? 0.5 : 0);
   const fmtSlot = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+  const fmtMin = (totalMin) => { const h = Math.floor(totalMin / 60) % 24; const m = totalMin % 60; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
 
   const getOccupied = useCallback((day, excludeId) => {
-    const occ = new Set();
+    // Returns occupied time ranges in minutes for collision detection
+    const ranges = [];
     (byDay[day] || []).forEach(p => {
       if (p.id === excludeId) return;
-      const start = getStartSlot(p);
-      const dur = Math.ceil(getDurSlots(p));
-      for (let s = start; s < start + dur && s < SLOT_COUNT; s++) occ.add(s);
+      const startMin = p.utcHour * 60 + p.utcMin;
+      const endMin = startMin + (p.duration || 30);
+      ranges.push({ startMin, endMin });
     });
-    return occ;
+    return ranges;
   }, [byDay]);
 
-  const magnetize = useCallback((day, targetSlot, durSlots, excludeId) => {
-    const occ = getOccupied(day, excludeId);
-    const ceilDur = Math.ceil(durSlots);
-    const fits = (s) => { for (let i = s; i < s + ceilDur && i < SLOT_COUNT; i++) { if (occ.has(i)) return false; } return s >= 0 && s + ceilDur <= SLOT_COUNT; };
-    if (fits(targetSlot)) return targetSlot;
-    for (let offset = 1; offset < SLOT_COUNT; offset++) {
-      if (fits(targetSlot - offset)) return targetSlot - offset;
-      if (fits(targetSlot + offset)) return targetSlot + offset;
+  const magnetize = useCallback((day, targetMin, durMin, excludeId) => {
+    const ranges = getOccupied(day, excludeId);
+    const fits = (s) => {
+      if (s < 0 || s + durMin > 24 * 60) return false;
+      return !ranges.some(r => s < r.endMin && s + durMin > r.startMin);
+    };
+    // Snap to nearest 15-min boundary
+    const snapped = Math.round(targetMin / 15) * 15;
+    if (fits(snapped)) return snapped;
+    for (let offset = 15; offset < 24 * 60; offset += 15) {
+      if (fits(snapped - offset)) return snapped - offset;
+      if (fits(snapped + offset)) return snapped + offset;
     }
     return null;
   }, [getOccupied]);
@@ -875,7 +882,11 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const col = Math.floor((x - LABEL_W) / ((rect.width - LABEL_W) / 7));
     const slot = Math.floor((y - HEADER_H) / ROW_H);
     if (col < 0 || col > 6 || slot < 0 || slot >= SLOT_COUNT) return null;
-    return { day: DAY_ORDER[col], slot };
+    // Calculate minute-level position within the slot for 15-min snapping
+    const yInSlot = (y - HEADER_H) - slot * ROW_H;
+    const halfSlot = yInSlot > ROW_H / 2 ? 1 : 0;
+    const totalMin = slot * 30 + halfSlot * 15;
+    return { day: DAY_ORDER[col], slot, totalMin };
   };
 
   const onDragStart = (p) => (e) => { setDragging(p); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); };
@@ -883,10 +894,10 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const onGridDrop = (e) => {
     e.preventDefault();
     if (!dragging || !dragPos) { setDragging(null); setDragPos(null); return; }
-    const durSlots = getDurSlots(dragging);
-    const snapped = magnetize(dragPos.day, dragPos.slot, durSlots, dragging.id);
-    if (snapped != null) {
-      const h = Math.floor(snapped / 2); const m = (snapped % 2) * 30;
+    const durMin = dragging.duration || 30;
+    const snappedMin = magnetize(dragPos.day, dragPos.totalMin, durMin, dragging.id);
+    if (snappedMin != null) {
+      const h = Math.floor(snappedMin / 60); const m = snappedMin % 60;
       setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
       onUpdateParty({ ...dragging, utcDay: dragPos.day, utcHour: h, utcMin: m });
     }
@@ -910,11 +921,14 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
   const dragPreview = useMemo(() => {
     if (!dragging || !dragPos) return null;
-    const durSlots = getDurSlots(dragging);
-    const snapped = magnetize(dragPos.day, dragPos.slot, durSlots, dragging.id);
-    if (snapped == null) return null;
-    const h = Math.floor(snapped / 2); const m = (snapped % 2) * 30;
-    return { day: dragPos.day, startSlot: snapped, durSlots, timeStr: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+    const durMin = dragging.duration || 30;
+    const snappedMin = magnetize(dragPos.day, dragPos.totalMin, durMin, dragging.id);
+    if (snappedMin == null) return null;
+    const h = Math.floor(snappedMin / 60); const m = snappedMin % 60;
+    // Convert to slot-space for positioning (minutes / 30 = slots)
+    const startSlot = snappedMin / 30;
+    const durSlots = durMin / 30;
+    return { day: dragPos.day, startSlot, durSlots, timeStr: fmtMin(snappedMin) };
   }, [dragging, dragPos, magnetize]);
 
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
