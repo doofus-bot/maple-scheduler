@@ -1318,13 +1318,19 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
           <thead><tr>
             <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-            {chars.map(c => <th key={c} style={{ padding: "8px 4px", textAlign: "center", borderBottom: "2px solid rgba(30,36,64,.6)", minWidth: 100, verticalAlign: "bottom" }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                <CharAvatar name={c} size={40} />
-                <span style={{ fontSize: 12, color: ACCENT, fontWeight: 700, fontFamily: "'Fredoka',sans-serif" }}>{c}</span>
-                <CharJobLevel name={c} />
-              </div>
-            </th>)}
+            {chars.map(c => {
+              const ci = charInfoCache[c];
+              const jobStr = ci?.jobName && ci.jobName.toLowerCase() !== c.toLowerCase() ? ci.jobName : "";
+              return <th key={c} style={{ padding: "8px 4px", textAlign: "center", borderBottom: "2px solid rgba(30,36,64,.6)", minWidth: 100, verticalAlign: "bottom" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  <CharAvatar name={c} size={40} />
+                  <span style={{ fontSize: 12, color: ACCENT, fontWeight: 700, fontFamily: "'Fredoka',sans-serif" }}>{c}</span>
+                  <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>
+                    {ci?.level ? `Lv.${ci.level}` : ""}{jobStr ? ` ${jobStr}` : ""}
+                  </span>
+                </div>
+              </th>;
+            })}
           </tr></thead>
           <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
             <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
@@ -1334,7 +1340,8 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
               const isSkipped = skip && !p;
               const lvlReq = BOSS_LEVEL_REQ[bn];
               const charLevel = charInfoCache[cn]?.level || 0;
-              const isLocked = lvlReq && charLevel > 0 && charLevel < lvlReq && !unlocked[`${cn}|${bn}`] && !p && !isSkipped;
+              const underLevel = lvlReq && charLevel > 0 && charLevel < lvlReq;
+              const isLocked = underLevel && !unlocked[`${cn}|${bn}`] && !p;
               return (
                 <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : isLocked ? "rgba(0,0,0,.15)" : "transparent", position: "relative" }}>
                   {isLocked ? (
@@ -1348,6 +1355,12 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     </div>
                   ) : (
                   <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "center" }}>
+                    {/* Re-lock button when under level but unlocked */}
+                    {underLevel && !p && <button onClick={() => setUnlocked(prev => { const c = { ...prev }; delete c[`${cn}|${bn}`]; return c; })}
+                      title={`Lock (requires Lv.${lvlReq})`}
+                      style={{ ...sBtnBase, background: "rgba(100,116,139,.08)", width: 18, height: 18, fontSize: 10 }}>
+                      🔒
+                    </button>}
                     {/* Status */}
                     {p && (() => {
                       const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1;
