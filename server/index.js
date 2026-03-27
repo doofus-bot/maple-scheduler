@@ -200,15 +200,14 @@ app.get("/api/me", requireAuth, (req, res) => {
 });
 
 app.patch("/api/me", requireAuth, (req, res) => {
-  const { timezone, characters, availability, showSolos } = req.body;
+  const { timezone, characters, availability, showSolos, notifications } = req.body;
   if (timezone) db.prepare("UPDATE users SET timezone = ? WHERE id = ?").run(timezone, req.user.id);
   if (characters !== undefined) db.prepare("UPDATE users SET characters = ? WHERE id = ?").run(JSON.stringify(characters), req.user.id);
   if (availability !== undefined) db.prepare("UPDATE users SET availability = ? WHERE id = ?").run(JSON.stringify(availability), req.user.id);
-  if (showSolos !== undefined) {
-    const cur = JSON.parse(db.prepare("SELECT settings FROM users WHERE id = ?").get(req.user.id)?.settings || "{}");
-    cur.showSolos = showSolos;
-    db.prepare("UPDATE users SET settings = ? WHERE id = ?").run(JSON.stringify(cur), req.user.id);
-  }
+  const cur = JSON.parse(db.prepare("SELECT settings FROM users WHERE id = ?").get(req.user.id)?.settings || "{}");
+  if (showSolos !== undefined) cur.showSolos = showSolos;
+  if (notifications !== undefined) cur.notifications = notifications;
+  db.prepare("UPDATE users SET settings = ? WHERE id = ?").run(JSON.stringify(cur), req.user.id);
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
@@ -314,5 +313,141 @@ if (process.env.NODE_ENV === "production") {
   app.use(express.static(distPath));
   app.get("*", (req, res) => res.sendFile(join(distPath, "index.html")));
 }
+
+/* ════════════════════════════════════════
+   DM NOTIFICATION SCHEDULER
+   ════════════════════════════════════════ */
+// Table to track sent notifications (avoid duplicates)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notifications_sent (
+    id TEXT PRIMARY KEY,
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+// Clean old entries (>7 days)
+try { db.prepare("DELETE FROM notifications_sent WHERE sent_at < datetime('now', '-7 days')").run(); } catch {}
+
+const NOTIFY_INTERVALS = [60, 30, 15, 10, 5, 0]; // minutes before boss time
+
+async function sendDiscordDM(userId, message) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return;
+  try {
+    // Open DM channel
+    const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    if (!chRes.ok) { console.error(`DM channel failed for ${userId}:`, chRes.status); return; }
+    const ch = await chRes.json();
+    // Send message
+    const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+    if (!msgRes.ok) console.error(`DM send failed for ${userId}:`, msgRes.status);
+  } catch (err) { console.error(`DM error for ${userId}:`, err.message); }
+}
+
+function runNotificationCheck() {
+  if (!process.env.DISCORD_BOT_TOKEN) return;
+  try {
+    const now = new Date();
+    const nowUTC = now.getUTCDay(); // 0=Sun
+    const nowDay = (nowUTC + 6) % 7; // convert to 0=Mon..6=Sun
+    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+    // Load parties
+    const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
+    const parties = JSON.parse(row?.data || "{}");
+
+    // Load all users with notification prefs
+    const users = db.prepare("SELECT id, username, settings, timezone FROM users").all();
+    const userMap = {};
+    users.forEach(u => {
+      const s = JSON.parse(u.settings || "{}");
+      if (s.notifications?.enabled) userMap[u.id] = { ...u, notifs: s.notifications };
+    });
+
+    const siteUrl = process.env.SITE_URL || "https://maplescheduler.com";
+
+    for (const [pid, party] of Object.entries(parties)) {
+      if (party.skipped || party.utcDay == null) continue;
+      const bossStartMin = party.utcHour * 60 + party.utcMin;
+      const bossDay = party.utcDay;
+      const bossName = party.bosses?.[0]?.bossName || "Boss";
+      const diff = party.bosses?.[0]?.difficulty || "";
+      const duration = party.duration || 30;
+
+      for (const member of (party.members || [])) {
+        const userId = member.userId;
+        const userPref = userMap[userId];
+        if (!userPref?.notifs?.enabled) continue;
+        const timings = userPref.notifs.timings || [];
+
+        for (const minsBefore of NOTIFY_INTERVALS) {
+          if (!timings.includes(minsBefore)) continue;
+
+          // Calculate when this notification should fire
+          let notifyMin = bossStartMin - minsBefore;
+          let notifyDay = bossDay;
+          if (notifyMin < 0) { notifyMin += 24 * 60; notifyDay = (notifyDay - 1 + 7) % 7; }
+
+          // Is it time? (within 1 minute window)
+          if (notifyDay === nowDay && Math.abs(nowMin - notifyMin) <= 1) {
+            const sentKey = `${pid}_${userId}_${minsBefore}_${nowDay}_${Math.floor(nowMin / 2)}`;
+            const already = db.prepare("SELECT id FROM notifications_sent WHERE id = ?").get(sentKey);
+            if (already) continue;
+
+            // Calculate Unix timestamp for the boss start
+            const bossDate = new Date(now);
+            // Find the next occurrence of bossDay
+            const daysUntil = ((bossDay - nowDay) % 7 + 7) % 7;
+            bossDate.setUTCDate(bossDate.getUTCDate() + (daysUntil === 0 && nowMin > bossStartMin + 2 ? 7 : daysUntil));
+            bossDate.setUTCHours(party.utcHour, party.utcMin, 0, 0);
+            const startUnix = Math.floor(bossDate.getTime() / 1000);
+            const endUnix = startUnix + duration * 60;
+
+            // Reset relation
+            const minsFromReset = party.utcHour * 60 + party.utcMin;
+            const minsToReset = 24 * 60 - minsFromReset;
+            const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
+            const absMins = useNeg ? minsToReset : minsFromReset;
+            const rH = Math.floor(absMins / 60), rM = absMins % 60;
+            const resetStr = "Reset " + (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
+
+            // Party members list
+            const partySize = party.members?.length || 1;
+            const memberNames = party.members?.map(m => m.charName).filter(Boolean).join(", ") || "—";
+
+            // Build rich message
+            let msg;
+            if (minsBefore === 0) {
+              msg = `🍄 **${diff} ${bossName}** is starting NOW!`;
+            } else {
+              msg = `🍄 **${diff} ${bossName}** starts in **${minsBefore} minutes**!`;
+            }
+            msg += `\n\n**${resetStr}**`;
+            msg += `\n<t:${startUnix}:R> — <t:${startUnix}:F>`;
+            msg += `\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
+            msg += `\n\n👤 **${member.charName || "—"}** | ${partySize > 1 ? partySize + "p — " + memberNames : "Solo"}`;
+            msg += `\n\n🔗 [View Party](${siteUrl})`;
+
+            // Send and mark as sent
+            sendDiscordDM(userId, msg);
+            db.prepare("INSERT OR IGNORE INTO notifications_sent (id) VALUES (?)").run(sentKey);
+          }
+        }
+      }
+    }
+  } catch (err) { console.error("Notification check error:", err); }
+}
+
+// Run every 60 seconds
+setInterval(runNotificationCheck, 60 * 1000);
+// Run once on startup after a short delay
+setTimeout(runNotificationCheck, 5000);
 
 app.listen(PORT, () => console.log(`🍄 Maple Scheduler running on port ${PORT}`));
