@@ -463,7 +463,7 @@ function runNotificationCheck() {
 
           // Is it time? (within 1 minute window)
           if (notifyDay === nowDay && Math.abs(nowMin - notifyMin) <= 1) {
-            const sentKey = `${pid}_${userId}_${minsBefore}_${nowDay}_${Math.floor(nowMin / 2)}`;
+            const sentKey = `${pid}_${userId}_${minsBefore}_${bossDay}`;
             const already = db.prepare("SELECT id FROM notifications_sent WHERE id = ?").get(sentKey);
             if (already) continue;
 
@@ -498,7 +498,7 @@ function runNotificationCheck() {
             msg += `\n<t:${startUnix}:R> — <t:${startUnix}:F>`;
             msg += `\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
             msg += `\n\n👤 **${member.charName || "—"}** | ${partySize > 1 ? partySize + "p — " + memberNames : "Solo"}`;
-            msg += `\n\n🔗 [View Party](${siteUrl})`;
+            msg += `\n\n🔗 [View Party](${siteUrl}/party/${pid})`;
 
             // Send and mark as sent
             sendDiscordDM(userId, msg);
