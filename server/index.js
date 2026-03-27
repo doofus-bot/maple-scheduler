@@ -387,8 +387,7 @@ function runNotificationCheck() {
         if (!userPref?.notifs?.enabled) continue;
         const timings = userPref.notifs.timings || [];
 
-        for (const minsBefore of NOTIFY_INTERVALS) {
-          if (!timings.includes(minsBefore)) continue;
+        for (const minsBefore of timings) {
 
           // Calculate when this notification should fire
           let notifyMin = bossStartMin - minsBefore;
