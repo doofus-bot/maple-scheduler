@@ -959,13 +959,17 @@ function ProfileModal({ user, onClose, onSave }) {
             <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Send a test message to your Discord</span>
           </div>}
         </div>
+        {/* Logout */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(30,36,64,.4)" }}>
+          <a href="/auth/logout" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 16px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", background: "rgba(239,68,68,.06)", color: "#f87171", fontSize: 12, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", textDecoration: "none", cursor: "pointer" }}>Logout</a>
+        </div>
       </div>
     </div></div>
   );
 }
 
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
-function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete }) {
+function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete, onShare, shareCopied }) {
   const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id || m.userId === user.username));
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
@@ -1130,12 +1134,17 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${showSolos ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: showSolos ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: showSolos ? "#10b981" : "#475569" }}>
               {showSolos ? "\ud83d\udc64 Solos" : "\ud83d\udc64 Hidden"}
             </button>
+            <button onClick={onShare}
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${shareCopied ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: shareCopied ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: shareCopied ? "#10b981" : "#475569" }}>
+              {shareCopied ? "✓ Copied" : "🔗 Share"}
+            </button>
           </div>
           {/* Live clock + reset */}
           <div style={{ marginTop: 8, fontSize: 11, fontFamily: "'Comfortaa',sans-serif" }}>
             {(() => {
               const now = new Date();
               const localTime = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+              const tzAbbr = now.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").pop();
               const utcH = now.getUTCHours(), utcM = now.getUTCMinutes();
               const minsFromReset = utcH * 60 + utcM;
               const minsToReset = 24 * 60 - minsFromReset;
@@ -1143,7 +1152,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               const absMins = useNeg ? minsToReset : minsFromReset;
               const rH = Math.floor(absMins / 60), rM = absMins % 60;
               const resetStr = (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
-              return <><span style={{ color: "#e2e8f0", fontWeight: 600 }}>{localTime}</span><span style={{ marginLeft: 8, color: ACCENT, fontWeight: 700 }}>Reset {resetStr}</span></>;
+              return <><span style={{ color: "#64748b", fontWeight: 500 }}>Current Time ({tzAbbr})</span><span style={{ color: "#e2e8f0", fontWeight: 600, marginLeft: 6 }}>{localTime}</span><span style={{ marginLeft: 8, color: ACCENT, fontWeight: 700 }}>Reset {resetStr}</span></>;
             })()}
           </div>
           {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 6 }}>Drag parties to reschedule</div>}
@@ -1808,7 +1817,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
-  const [showSharePopover, setShowSharePopover] = useState(false);
 
   // Pre-load share token if user has one
   useEffect(() => { if (user?.shareToken) setShareUrl(`${window.location.origin}/share/${user.shareToken}`); }, [user]);
@@ -1904,7 +1912,7 @@ export default function App() {
   };
 
   const generateShare = async () => {
-    if (shareUrl) { setShowSharePopover(true); doCopy(shareUrl); return; }
+    if (shareUrl) { doCopy(shareUrl); return; }
     try {
       const r = await fetch("/api/me/share", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!r.ok) { const txt = await r.text(); throw new Error(`HTTP ${r.status}: ${txt}`); }
@@ -1912,7 +1920,6 @@ export default function App() {
       if (!d.token) throw new Error("No token returned");
       const url = `${window.location.origin}/share/${d.token}`;
       setShareUrl(url);
-      setShowSharePopover(true);
       doCopy(url);
     } catch (e) { console.error("Share error:", e); alert("Failed to generate share link: " + e.message); }
   };
@@ -1947,25 +1954,11 @@ export default function App() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=4" alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
           <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
-          <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
-          <button style={{ ...S.btnGhost, fontSize: 12, ...(shareCopied ? { color: "#10b981", borderColor: "rgba(34,197,94,.3)" } : {}) }} onClick={generateShare}>{shareCopied ? "✓ Link Copied!" : "🔗 Share"}</button>
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
-          <a href="/auth/logout" style={{ ...S.btnGhost, textDecoration: "none", fontSize: 12 }}>Logout</a>
         </div>
-        {/* Share popover */}
-        {showSharePopover && shareUrl && <div style={{ position: "absolute", right: 24, top: 54, zIndex: 60, background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: 14, boxShadow: "0 8px 32px rgba(0,0,0,.5)", width: 340 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", marginBottom: 8 }}>Share Your Schedule</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <input readOnly value={shareUrl} style={{ ...S.input, fontSize: 10, padding: "6px 8px", flex: 1 }} onClick={e => e.target.select()} />
-            <button onClick={() => doCopy(shareUrl)} style={{ ...S.btnPrimary, fontSize: 10, padding: "6px 10px", whiteSpace: "nowrap" }}>{shareCopied ? "✓" : "Copy"}</button>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <button onClick={regenerateShare} style={{ ...S.btnGhost, fontSize: 9, padding: "3px 8px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Regenerate Link</button>
-            <button onClick={() => setShowSharePopover(false)} style={{ ...S.btnGhost, fontSize: 9, padding: "3px 8px" }}>Close</button>
-          </div>
-        </div>}
       </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
         {view === "party" && selectedParty ? (
@@ -1973,7 +1966,7 @@ export default function App() {
         ) : view === "characters" ? (
           <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} onCreateSolo={handleCreateSolo} onSkipBoss={handleSkipBoss} onSaveProfile={handleSaveProfile} />
         ) : (
-          <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} />
+          <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} onShare={generateShare} shareCopied={shareCopied} />
         )}
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
