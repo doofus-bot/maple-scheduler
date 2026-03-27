@@ -484,6 +484,14 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               }
               setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
             }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
+            {/* Duration +/- */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
+              <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }}
+                style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
+              <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
+              <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }}
+                style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) >= 120 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) >= 120 ? 0.3 : 1 }}>+</button>
+            </div>
             {party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
@@ -1055,6 +1063,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   const mc = p.members?.length || 1;
                   const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : mc === 4 ? "Quad" : `${mc}p`;
                   const blockH = durS * ROW_H;
+                  const tiny = blockH < 20;
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)}
@@ -1063,24 +1072,24 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       onMouseLeave={() => setHoverParty(null)}
                       style={{
                       position: "absolute", top: visTop + 1, left: 2, right: 2,
-                      height: blockH - 2, borderRadius: 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
-                      padding: "2px 5px", overflow: "hidden",
+                      height: blockH - 2, borderRadius: tiny ? 3 : 5, cursor: editing ? "grab" : "pointer", zIndex: 3,
+                      padding: tiny ? "0 4px" : "2px 5px", overflow: "hidden",
                       background: solo ? "rgba(160,70,70,.85)" : "rgba(20,24,41,.92)",
-                      border: `2px solid ${solo ? "#c45c5c" : dc}`,
+                      border: `${tiny ? 1 : 2}px solid ${solo ? "#c45c5c" : dc}`,
                       boxShadow: `0 0 6px ${dc}33`,
                       fontFamily: "'Comfortaa',sans-serif",
-                      display: "flex", flexDirection: "column", justifyContent: "space-between",
+                      display: "flex", flexDirection: tiny ? "row" : "column", alignItems: tiny ? "center" : "stretch", justifyContent: tiny ? "flex-start" : "space-between", gap: tiny ? 3 : 0,
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.3)` } : {}),
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <span style={{ fontSize: 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
+                        <span style={{ fontSize: tiny ? 6 : 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        <span style={{ fontSize: tiny ? 8 : 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
-                      {blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      {!tiny && blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <span style={{ fontSize: 8, color: "rgba(255,255,255,.5)", fontWeight: 600 }}>{fmtSlot(startS)}</span>
                         <span style={{ fontSize: 7, color: "#94a3b8" }}>{sizeLabel}</span>
                       </div>}
-                      {blockH > 40 && <ScheduleBlockJob charName={p.members?.[0]?.charName} />}
+                      {!tiny && blockH > 40 && <ScheduleBlockJob charName={p.members?.[0]?.charName} />}
                     </div>
                   );
                 })}
