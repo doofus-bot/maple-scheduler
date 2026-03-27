@@ -23,13 +23,28 @@ const BOSS_DROPS = {
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
 const BOSS_LEVEL_REQ = { Seren: 260, Kalos: 265, Adversary: 270, Kaling: 275, Limbo: 285, Baldrix: 290 };
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
-const DIFF_COLORS = { Easy: "#5c6e3a", Normal: "#2ea44f", Hard: "#d4578a", Chaos: "#8838c4", Extreme: "#c42828" };
+const DIFF_COLORS = { Easy: "#989898", Normal: "#49B8C6", Hard: "#CE506D", Chaos: "#DCBA87", Extreme: "#ED7421" };
+const DIFF_BADGE_STYLE = {
+  Easy:    { background: "#989898", color: "#fff", border: "none" },
+  Normal:  { background: "#49B8C6", color: "#fff", border: "none" },
+  Hard:    { background: "#CE506D", color: "#fff", border: "none" },
+  Chaos:   { background: "#424243", color: "#DCBA87", border: "1px solid #CAA78A", backgroundImage: "linear-gradient(135deg,#DCBA87,#CAA78A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", borderImage: "linear-gradient(135deg,#DCBA87,#CAA78A) 1" },
+  Extreme: { background: "#424243", color: "#ED7421", border: "1px solid #C03655", borderImage: "linear-gradient(135deg,#C03655,#C83958) 1", backgroundImage: "linear-gradient(135deg,#ED7421,#A63647)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
+};
+// Simplified badge for small inline use (no gradient text — too complex for tiny badges)
+const getDiffBadge = (diff) => {
+  const s = DIFF_BADGE_STYLE[diff];
+  if (!s) return {};
+  if (diff === "Chaos") return { background: "#424243", color: "#DCBA87", border: "1px solid #CAA78A" };
+  if (diff === "Extreme") return { background: "#424243", color: "#ED7421", border: "1px solid #C03655" };
+  return { background: s.background, color: s.color, border: "none" };
+};
 const DIFF_GRADIENTS = {
-  Easy: "linear-gradient(180deg, #7a8a44 0%, #4a5a24 100%)",
-  Normal: "linear-gradient(180deg, #38a855 0%, #1d6e30 100%)",
-  Hard: "linear-gradient(180deg, #c83068 0%, #8a1840 100%)",
-  Chaos: "linear-gradient(180deg, #9038cc 0%, #5a1a8a 100%)",
-  Extreme: "linear-gradient(180deg, #d43535 0%, #8a1a1a 100%)",
+  Easy: "#989898",
+  Normal: "#49B8C6",
+  Hard: "#CE506D",
+  Chaos: "#424243",
+  Extreme: "#424243",
 };
 const ACCENT = "#2563eb", ACCENT_LIGHT = "rgba(37,99,235,0.15)", ACCENT_BORDER = "rgba(37,99,235,0.3)";
 const SOLO_COLOR = "#c45c5c", SOLO_BG = "rgba(196,92,92,0.18)", SOLO_BORDER = "rgba(196,92,92,0.35)";
@@ -166,9 +181,24 @@ function ScheduleBlockJob({ charName }) {
 }
 
 function DiffBadge({ difficulty, small }) {
-  const grad = DIFF_GRADIENTS[difficulty] || "linear-gradient(180deg, #555 0%, #333 100%)";
-  if (small) return <span style={{ fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 3, background: grad, color: "#fff", flexShrink: 0, textShadow: "0 1px 2px rgba(0,0,0,.5)", letterSpacing: "0.5px", border: "1px solid rgba(255,255,255,.15)" }}>{DIFF_ABBR[difficulty] || ""}</span>;
-  return <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 4, background: grad, color: "#fff", flexShrink: 0, textShadow: "0 1px 2px rgba(0,0,0,.5)", letterSpacing: "0.5px", border: "1px solid rgba(255,255,255,.15)", boxShadow: "0 2px 4px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.15)" }}>{difficulty?.toUpperCase() || ""}</span>;
+  const bg = DIFF_GRADIENTS[difficulty] || "#555";
+  const abbr = DIFF_ABBR[difficulty] || "";
+  const full = difficulty?.toUpperCase() || "";
+  const label = small ? abbr : full;
+  const sz = small ? { fontSize: 7, padding: "1px 4px", borderRadius: 3 } : { fontSize: 10, padding: "2px 8px", borderRadius: 4 };
+  const base = { ...sz, fontWeight: 800, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
+
+  if (difficulty === "Chaos") {
+    return <span style={{ ...base, background: bg, border: "1px solid #CAA78A", position: "relative", overflow: "hidden" }}>
+      <span style={{ backgroundImage: "linear-gradient(135deg,#DCBA87,#CAA78A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{label}</span>
+    </span>;
+  }
+  if (difficulty === "Extreme") {
+    return <span style={{ ...base, background: bg, border: "1px solid #C03655", position: "relative", overflow: "hidden" }}>
+      <span style={{ backgroundImage: "linear-gradient(135deg,#ED7421,#A63647)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{label}</span>
+    </span>;
+  }
+  return <span style={{ ...base, background: bg, color: "#fff", border: "none" }}>{label}</span>;
 }
 
 /* ═══ IGN POPUP ═══ */
@@ -184,7 +214,7 @@ function PartyHoverCard({ party, currentUserId, style: pos }) {
       <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 160, maxWidth: 240 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+          <DiffBadge difficulty={b?.difficulty} />
         </div>
         <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>{timeStr}</div>
         {me && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -470,7 +500,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                 {BOSSES.find(b => b.name === boss?.bossName)?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             ) : (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${diffColor}22`, color: diffColor }}>{boss?.difficulty}</span>
+              <DiffBadge difficulty={boss?.difficulty} />
             )}
           </div>
           {party.utcDay != null && (() => {
@@ -1061,7 +1091,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 5px", borderRadius: 4, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                          <span style={{ marginLeft: 6 }}><DiffBadge difficulty={b?.difficulty} small /></span>
                           {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
                         </div>
                         <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{p.members?.[0]?.charName || "\u2014"}</div>
@@ -1092,7 +1122,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
               return (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", opacity: 0.7 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Fredoka',sans-serif", textDecoration: "line-through" }}>{b?.bossName}</span>
-                  <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: `${dc}22`, color: dc }}>{b?.difficulty}</span>
+                  <DiffBadge difficulty={b?.difficulty} small />
                   <button onClick={() => onRecover(p.id)} style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(34,197,94,.15)", color: "#10b981", fontSize: 9, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Recover</button>
                   <button onClick={() => onPermDelete(p.id)} style={{ padding: "2px 6px", borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.1)", color: "#f87171", fontSize: 9 }}>{"\u2715"}</button>
                 </div>
@@ -1381,11 +1411,10 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
                         onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
                         onMouseLeave={() => setHoverParty(null)}
-                        style={{ padding: "3px 8px", borderRadius: 5, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif",
-                          background: `${dc}20`,
-                          border: `1px solid ${solo ? "rgba(255,255,255,.4)" : dc + "44"}`,
-                          color: dc }}>
-                        {`${DIFF_ABBR[b?.difficulty] || ""} · ${p.members?.length}p`}
+                        style={{ padding: "3px 6px", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                          background: "rgba(11,14,26,.4)", border: `1px solid ${solo ? "rgba(255,255,255,.4)" : dc + "44"}` }}>
+                        <DiffBadge difficulty={b?.difficulty} small />
+                        <span style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{p.members?.length}p</span>
                       </button>;
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
@@ -1433,7 +1462,7 @@ function LoginPage() {
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0e1a url('/Background.png?v=2') center center / cover fixed", fontFamily: "'Comfortaa',sans-serif" }}>
     <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse at center,transparent 20%,rgba(0,0,0,.7) 100%)", pointerEvents: "none" }} />
     <div style={{ textAlign: "center", padding: 40, background: "rgba(20,24,41,.85)", border: "1px solid #1e2440", borderRadius: 20, backdropFilter: "blur(12px)", boxShadow: "0 24px 80px rgba(0,0,0,.4)", animation: "slideUp .3s ease", position: "relative", zIndex: 1 }}>
-      <img src="/logo.png?v=2" alt="" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
+      <img src="/logo.png?v=3" alt="" style={{ width: 80, height: 80, borderRadius: 16, margin: "0 auto 16px", display: "block", objectFit: "contain" }} />
       <h1 style={{ fontSize: 26, fontWeight: 700, color: "#e2e8f0", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Maple Scheduler</h1>
       <p style={{ fontSize: 14, color: "#64748b", marginBottom: 28, maxWidth: 300 }}>Organize your GMS bossing parties!</p>
       <a href="/auth/discord" style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "12px 28px", borderRadius: 10, textDecoration: "none", background: "#5865F2", color: "#fff", fontWeight: 600, fontSize: 15, boxShadow: "0 4px 20px rgba(88,101,242,.4)" }}>
@@ -1571,7 +1600,7 @@ function ShareView({ token }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <img src="/logo.png?v=2" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
+            <img src="/logo.png?v=3" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
             <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span>
           </a>
           <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Viewing {owner.username}'s schedule</span>
@@ -1653,7 +1682,7 @@ function ShareView({ token }) {
                       transition: "opacity .3s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <span style={{ fontSize: 7, fontWeight: 700, padding: "0px 3px", borderRadius: 3, background: `${dc}33`, color: dc, flexShrink: 0 }}>{DIFF_ABBR[b?.difficulty] || ""}</span>
+                        <DiffBadge difficulty={b?.difficulty} small />
                         <span style={{ fontSize: 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
                       {blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1821,7 +1850,7 @@ export default function App() {
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "radial-gradient(ellipse at center,rgba(0,0,0,.2) 0%,rgba(0,0,0,.65) 100%)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=2" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=3" alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
