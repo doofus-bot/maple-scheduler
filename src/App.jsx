@@ -102,6 +102,7 @@ const API = {
   async patch(p, b) { return (await fetch(p, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })).json(); },
   async put(p, b) { return (await fetch(p, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })).json(); },
 };
+const genId = () => { const a = new Uint8Array(8); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, "0")).join(""); };
 
 /* ═══ IMAGE CACHE ═══ */
 const charInfoCache = {};
@@ -289,7 +290,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
   const save = () => {
     if (!boss || (!diff && boss !== "Other")) return;
     onSave({
-      id: Date.now().toString(36), leaderId: currentUser.id, members, maxMembers: maxP,
+      id: genId(), leaderId: currentUser.id, members, maxMembers: maxP,
       bosses: [{ id: "b0", bossName: boss, difficulty: diff }],
       utcDay: null, utcHour: null, utcMin: null, duration: 30, notes: "",
       drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })),
@@ -901,7 +902,7 @@ function ProfileModal({ user, onClose, onSave }) {
               style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${notifEnabled ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", fontSize: 12, background: notifEnabled ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifEnabled ? "#10b981" : "#64748b" }}>
               {notifEnabled ? "✓ Enabled" : "Disabled"}
             </button>
-            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Receive Discord DMs before your boss runs</span>
+            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Discord notification before Party Bossing</span>
           </div>
           {notifEnabled && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {[{ label: "1 hour", mins: 60 }, { label: "30 min", mins: 30 }, { label: "15 min", mins: 15 }, { label: "10 min", mins: 10 }, { label: "5 min", mins: 5 }, { label: "At start", mins: 0 }].map(opt => {
@@ -940,7 +941,7 @@ function ProfileModal({ user, onClose, onSave }) {
               style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${notifSolos ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: notifSolos ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifSolos ? "#10b981" : "#64748b" }}>
               {notifSolos ? "✓ Solo reminders" : "Solo reminders off"}
             </button>
-            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Notify at start time only for solo bosses</span>
+            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Discord notification at start time for Solo Bossing</span>
           </div>}
           {/* Test notification */}
           {notifEnabled && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
@@ -1819,6 +1820,22 @@ export default function App() {
 
   useEffect(() => { if (!user) return; const iv = setInterval(async () => { try { const p = await API.get("/api/parties"); if (p) setParties(p); const u = await API.get("/api/users"); if (u) setAllUsers(u); } catch {} }, 8000); return () => clearInterval(iv); }, [user]);
 
+  // Deep-link to a specific party via /party/:id
+  const partyLinkHandled = useRef(false);
+  useEffect(() => {
+    if (partyLinkHandled.current || !user || Object.keys(parties).length === 0) return;
+    const m = window.location.pathname.match(/^\/party\/([a-z0-9]+)$/);
+    if (m && parties[m[1]]) {
+      setSelectedParty(parties[m[1]]);
+      setView("party");
+      partyLinkHandled.current = true;
+      window.history.replaceState({}, "", "/");
+    } else if (m) {
+      partyLinkHandled.current = true;
+      window.history.replaceState({}, "", "/");
+    }
+  }, [user, parties]);
+
   // Check if we're on a /share/ route — AFTER all hooks
   const shareMatch = window.location.pathname.match(/^\/share\/([a-f0-9]+)$/);
   if (shareMatch) return <ShareView token={shareMatch[1]} />;
@@ -1863,7 +1880,7 @@ export default function App() {
     const diff = bossObj.diffs[0];
     const drops = getDropsForBoss(bossName, diff);
     const party = {
-      id: Date.now().toString(36), leaderId: user.id,
+      id: genId(), leaderId: user.id,
       members: [{ userId: user.id, charName, isTemp: false, isLead: true }],
       maxMembers: getMaxParty(bossName, diff),
       bosses: [{ id: "b0", bossName, difficulty: diff }],
@@ -1878,7 +1895,7 @@ export default function App() {
       if (skipId) { const np = { ...parties }; delete np[skipId]; await save(np); }
     } else {
       const skipEntry = {
-        id: `skip_${Date.now().toString(36)}`, skipped: true, _skipChar: charName, _skipUser: user.id,
+        id: `skip_${genId()}`, skipped: true, _skipChar: charName, _skipUser: user.id,
         bosses: [{ id: "b0", bossName, difficulty: "" }],
         members: [], leaderId: user.id,
       };
