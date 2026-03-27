@@ -360,9 +360,10 @@ try { db.prepare("DELETE FROM notifications_sent").run(); } catch {}
 
 const NOTIFY_INTERVALS = [60, 30, 15, 10, 5, 0]; // minutes before boss time
 
-async function sendDiscordDM(userId, message) {
+async function sendDiscordDM(userId, payload) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) return;
+  const body = typeof payload === "string" ? { content: payload } : payload;
   try {
     // Open DM channel
     const chRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
@@ -376,7 +377,7 @@ async function sendDiscordDM(userId, message) {
     const msgRes = await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
       method: "POST",
       headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ content: message }),
+      body: JSON.stringify(body),
     });
     if (!msgRes.ok) { console.error(`DM send failed for ${userId}:`, msgRes.status); return; }
     const msgData = await msgRes.json();
@@ -508,33 +509,50 @@ function runNotificationCheck() {
 
             // Boss GIFs
             const BOSS_GIFS = {
-              "Lotus": "https://media.discordapp.net/attachments/1447721739030364251/1447722529899941930/Lotus.gif?ex=69c85bac&is=69c70a2c&hm=77bf07d7bbe924c7c94e82dd82d88ea14d976d35c2891d15e622766a76385414&=&width=144&height=162",
-              "Black Mage": "https://media.discordapp.net/attachments/1447721739030364251/1447722830358909168/BlackMage2.gif?ex=69c85bf4&is=69c70a74&hm=d40cdc6b0339f78c9794cf9d235e6031d030750390548e2e4b9dd6b1e23494a8&=&width=144&height=190",
-              "Seren": "https://media.discordapp.net/attachments/1447721739030364251/1447722852806688869/Seren2.gif?ex=69c85bf9&is=69c70a79&hm=a7472d6d4918c40d9f3ad0923f66fd4fbf533bb99a71d54697126a9780cac517&=&width=144&height=104",
-              "Kalos": "https://media.discordapp.net/attachments/1447721739030364251/1447722948445339799/Kalos2.gif?ex=69c85c10&is=69c70a90&hm=bfce1dd91467e258c36ee1ee401d476a486ec3293d613e9795c62ff02dca04e7&=&width=144&height=93",
-              "Kaling": "https://media.discordapp.net/attachments/1447721739030364251/1447722960696770571/Kaling2.gif?ex=69c85c13&is=69c70a93&hm=c09e58570f80577cd49b6b183111f81a42e2fd0341a4496e01ab0516f5f7348e&=&width=144&height=94",
-              "Limbo": "https://media.discordapp.net/attachments/1447721739030364251/1447722991575371910/Limbo2.gif?ex=69c85c1a&is=69c70a9a&hm=7e90cf6e9038c5cb13dc11e125d8769f4b120b426039004d07828aa1f3bd58b5&=&width=144&height=148",
-              "Baldrix": "https://media.discordapp.net/attachments/1447721739030364251/1447723005768896703/Baldrix2.gif?ex=69c85c1d&is=69c70a9d&hm=185b86e2b6d309e159377fc234a8744a64725c0f4974c121847f71d8b893cb75&=&width=144&height=123",
-              "Adversary": "https://media.discordapp.net/attachments/1447721739030364251/1447723017449898108/FirstAdversary2.gif?ex=69c85c20&is=69c70aa0&hm=eeaf27f302a39b8565ff1cb5b6480bac503d18a7d99ba94fc6f9b505136d2344&=&width=144&height=156",
+              "Lotus": "https://media.discordapp.net/attachments/1447721739030364251/1447722529899941930/Lotus.gif",
+              "Black Mage": "https://media.discordapp.net/attachments/1447721739030364251/1447722830358909168/BlackMage2.gif",
+              "Seren": "https://media.discordapp.net/attachments/1447721739030364251/1447722852806688869/Seren2.gif",
+              "Kalos": "https://media.discordapp.net/attachments/1447721739030364251/1447722948445339799/Kalos2.gif",
+              "Kaling": "https://media.discordapp.net/attachments/1447721739030364251/1447722960696770571/Kaling2.gif",
+              "Limbo": "https://media.discordapp.net/attachments/1447721739030364251/1447722991575371910/Limbo2.gif",
+              "Baldrix": "https://media.discordapp.net/attachments/1447721739030364251/1447723005768896703/Baldrix2.gif",
+              "Adversary": "https://media.discordapp.net/attachments/1447721739030364251/1447723017449898108/FirstAdversary2.gif",
             };
 
-            // Build rich message
+            // Difficulty colors for embed sidebar
+            const EMBED_COLORS = { "Easy": 0x989898, "Normal": 0x49B8C6, "Hard": 0xCE506D, "Chaos": 0xDCBA87, "Extreme": 0xED7421 };
+
+            // Build embed
             const partyLink = `${siteUrl}/party/${pid}`;
-            let msg;
-            if (minsBefore === 0) {
-              msg = `**[${diff} ${bossName}](${partyLink})** is starting NOW!`;
-            } else {
-              msg = `**[${diff} ${bossName}](${partyLink})** starts in **${minsBefore} minutes**!`;
-            }
-            msg += `\n**${resetStr}**`;
-            msg += `\n<t:${startUnix}:R> — <t:${startUnix}:F>`;
-            msg += `\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
-            msg += `\n\n👤 **${member.charName || "—"}** | ${partySize > 1 ? partySize + "p — " + memberNames : "Solo"}`;
             const gif = BOSS_GIFS[bossName];
-            if (gif) msg += `\n${gif}`;
+            const embedColor = EMBED_COLORS[diff] || 0x2563eb;
+
+            let title;
+            if (minsBefore === 0) {
+              title = `${diff} ${bossName} — Starting NOW!`;
+            } else {
+              title = `${diff} ${bossName} — ${minsBefore}min`;
+            }
+
+            const timeField = `<t:${startUnix}:R> — <t:${startUnix}:F>\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
+            const partyField = partySize > 1 ? `**${member.charName || "—"}** | ${partySize}p — ${memberNames}` : `**${member.charName || "—"}** | Solo`;
+
+            const embed = {
+              title,
+              url: partyLink,
+              color: embedColor,
+              fields: [
+                { name: "Time", value: timeField, inline: false },
+                { name: "Party", value: partyField, inline: false },
+              ],
+              footer: { text: resetStr },
+            };
+            if (gif) embed.thumbnail = { url: gif };
+
+            const msgPayload = { embeds: [embed] };
 
             // Send and mark as sent
-            sendDiscordDM(realDiscordId, msg);
+            sendDiscordDM(realDiscordId, msgPayload);
             db.prepare("INSERT OR IGNORE INTO notifications_sent (id) VALUES (?)").run(sentKey);
             console.log(`📨 Notified ${realDiscordId} for ${diff} ${bossName} (${minsBefore}min before)`);
           }
