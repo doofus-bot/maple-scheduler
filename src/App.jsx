@@ -293,7 +293,7 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
 }
 
 /* ═══ PARTY PAGE — full page with schedule cross-ref, loot ═══ */
-function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelete, onBack }) {
+function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatchUpdate, onDelete, onBack }) {
   const boss = party.bosses?.[0];
   const diffColor = DIFF_COLORS[boss?.difficulty] || "#94a3b8";
   const drops = boss ? getDropsForBoss(boss.bossName, boss.difficulty) : [];
@@ -542,7 +542,27 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onDelet
               const availChars = isMe ? myChars : memberChars;
               const charOptions = [...new Set([...availChars, m.charName])];
               const showDropdown = canEditSelf || (canEditAsLead && charOptions.length >= 1);
-              const switchChar = (newName) => { onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) }); };
+              const switchChar = (newName) => {
+                const oldName = m.charName;
+                if (newName === oldName) return;
+                const bossKey = boss?.bossName + "|" + boss?.difficulty;
+                // Check if newName is already in another party for the same boss+diff
+                const otherParty = Object.values(allParties).find(op =>
+                  op.id !== party.id && !op.skipped &&
+                  op.bosses?.some(b => b.bossName + "|" + b.difficulty === bossKey) &&
+                  op.members?.some(om => om.charName?.toLowerCase() === newName.toLowerCase())
+                );
+                if (otherParty && onBatchUpdate) {
+                  // Swap: put oldName into the other party, newName into this party
+                  const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
+                    om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
+                  )};
+                  const updatedThis = { ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) };
+                  onBatchUpdate([updatedThis, updatedOther]);
+                } else {
+                  onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) });
+                }
+              };
               return (
                 <div key={i} style={{ padding: "10px 8px 8px", borderRadius: 10, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
                   {/* Edit controls */}
@@ -747,7 +767,23 @@ function ProfileModal({ user, onClose, onSave }) {
         </div>
         <div style={{ marginBottom: 20 }}><label style={S.label}>Your Characters (IGNs)</label>
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}><input style={S.input} placeholder="Add character IGN..." value={newChar} onChange={e => setNewChar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addChar(); } }} /><button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={addChar}>＋ Add</button></div>
-          {chars.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{chars.map((c, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, fontSize: 13, color: ACCENT, background: ACCENT_LIGHT, border: `1px solid ${ACCENT_BORDER}`, fontFamily: "'Comfortaa',sans-serif" }}>{c}<button onClick={() => rmChar(i)} style={{ width: 16, height: 16, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.2)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✕</button></div>)}</div> : <div style={{ fontSize: 13, color: "#475569" }}>No characters added yet.</div>}
+          {chars.length > 0 ? <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
+            {chars.map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
+                <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
+                <CharAvatar name={c} size={24} />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
+                <CharJobLevel name={c} />
+                <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                  <button onClick={() => { if (i > 0) setChars(p => { const a = [...p]; [a[i-1], a[i]] = [a[i], a[i-1]]; return a; }); }} disabled={i === 0}
+                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
+                  <button onClick={() => { if (i < chars.length - 1) setChars(p => { const a = [...p]; [a[i], a[i+1]] = [a[i+1], a[i]]; return a; }); }} disabled={i === chars.length - 1}
+                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
+                </div>
+                <button onClick={() => rmChar(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
+              </div>
+            ))}
+          </div> : <div style={{ fontSize: 13, color: "#475569" }}>No characters added yet.</div>}
         </div>
         <label style={S.label}>Availability</label>
         <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "auto" }}
@@ -1135,13 +1171,94 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 }
 
 
+/* ═══ MANAGE CHARACTERS MODAL ═══ */
+function CharRow({ name, index, total, onMove, onRemove }) {
+  const info = useCharInfo(name);
+  const arrowBtn = (label, disabled, onClick) => (
+    <button onClick={disabled ? undefined : onClick} style={{
+      width: 24, height: 24, borderRadius: 5, border: "1px solid rgba(30,36,64,.6)",
+      background: disabled ? "rgba(11,14,26,.2)" : "rgba(255,255,255,.04)", color: disabled ? "#1e2440" : "#94a3b8",
+      cursor: disabled ? "default" : "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center",
+      opacity: disabled ? 0.3 : 1, fontFamily: "'Comfortaa',sans-serif",
+    }}>{label}</button>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(30,36,64,.3)", background: index % 2 === 0 ? "rgba(255,255,255,.02)" : "transparent" }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif", width: 24, textAlign: "center" }}>{index + 1}</span>
+      <CharAvatar name={name} size={32} />
+      <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", width: 32, textAlign: "right" }}>{info?.level || "—"}</span>
+      <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", width: 100 }}>{info?.jobName || "—"}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", flex: 1 }}>{name}</span>
+      <div style={{ display: "flex", gap: 3 }}>
+        {arrowBtn("⤒", index === 0, () => onMove(index, 0))}
+        {arrowBtn("▲", index === 0, () => onMove(index, index - 1))}
+        {arrowBtn("▼", index === total - 1, () => onMove(index, index + 1))}
+        {arrowBtn("⤓", index === total - 1, () => onMove(index, total - 1))}
+      </div>
+      <button onClick={() => onRemove(index)} style={{ width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+    </div>
+  );
+}
+
+function ManageCharactersModal({ chars, onSave, onClose }) {
+  const [list, setList] = useState([...chars]);
+  const [newChar, setNewChar] = useState("");
+
+  const move = (from, to) => {
+    const a = [...list];
+    const [item] = a.splice(from, 1);
+    a.splice(to, 0, item);
+    setList(a);
+  };
+  const remove = (i) => setList(p => p.filter((_, j) => j !== i));
+  const add = () => { const n = newChar.trim(); if (n && !list.some(c => c.toLowerCase() === n.toLowerCase())) { setList(p => [...p, n]); setNewChar(""); } };
+  const save = () => { onSave(list); onClose(); };
+
+  return (
+    <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(560px,95vw)" }} onClick={e => e.stopPropagation()}>
+      <div style={S.modalHead}>
+        <span style={S.modalTitle}>Manage Characters</span>
+        <button style={S.closeBtn} onClick={onClose}>✕</button>
+      </div>
+      <div style={S.modalBody}>
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: "2px solid rgba(30,36,64,.6)", fontSize: 10, fontWeight: 600, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>
+          <span style={{ width: 24, textAlign: "center" }}>#</span>
+          <span style={{ width: 32 }} />
+          <span style={{ width: 32, textAlign: "right" }}>Lv</span>
+          <span style={{ width: 100 }}>Job</span>
+          <span style={{ flex: 1 }}>Name</span>
+          <span style={{ width: 114, textAlign: "center" }}>Position</span>
+          <span style={{ width: 24 }} />
+        </div>
+        {/* Character rows */}
+        <div style={{ maxHeight: 400, overflow: "auto" }}>
+          {list.map((c, i) => <CharRow key={c} name={c} index={i} total={list.length} onMove={move} onRemove={remove} />)}
+          {list.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: "#475569" }}>No characters</div>}
+        </div>
+        {/* Add character */}
+        <div style={{ display: "flex", gap: 8, padding: "12px 12px 0" }}>
+          <input style={S.input} placeholder="Add character IGN..." value={newChar} onChange={e => setNewChar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+          <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
+        </div>
+        {/* Save */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 12px 0" }}>
+          <button onClick={onClose} style={S.btnGhost}>Cancel</button>
+          <button onClick={save} style={S.btnPrimary}>Save Order</button>
+        </div>
+      </div>
+    </div></div>
+  );
+}
+
 /* ═══ CHARACTERS VIEW ═══ */
-function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss }) {
+function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss, onSaveProfile }) {
   const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id) || (p.skipped && p.leaderId === user.id));
   const allChars = (user.characters || []).slice(0, 12);
   const [page, setPage] = useState(0);
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
+  const [showManage, setShowManage] = useState(false);
   const PER_PAGE = 6;
   const totalPages = Math.ceil(allChars.length / PER_PAGE);
   const chars = allChars.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
@@ -1158,18 +1275,22 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
 
   return (
     <div>
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <button onClick={() => page > 0 && setPage(page - 1)}
-            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1, cursor: page === 0 ? "default" : "pointer", pointerEvents: page === 0 ? "none" : "auto" }}>← Prev</button>
-          <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
-            Page {page + 1} of {totalPages} ({allChars.length} chars)
-          </span>
-          <button onClick={() => page < totalPages - 1 && setPage(page + 1)}
-            style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1, cursor: page >= totalPages - 1 ? "default" : "pointer", pointerEvents: page >= totalPages - 1 ? "none" : "auto" }}>Next →</button>
+      {/* Top bar with pagination and manage */}
+      <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {totalPages > 1 && <>
+            <button onClick={() => page > 0 && setPage(page - 1)}
+              style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1, cursor: page === 0 ? "default" : "pointer", pointerEvents: page === 0 ? "none" : "auto" }}>← Prev</button>
+            <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
+              Page {page + 1} of {totalPages} ({allChars.length} chars)
+            </span>
+            <button onClick={() => page < totalPages - 1 && setPage(page + 1)}
+              style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1, cursor: page >= totalPages - 1 ? "default" : "pointer", pointerEvents: page >= totalPages - 1 ? "none" : "auto" }}>Next →</button>
+          </>}
+          {totalPages <= 1 && <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{allChars.length} character{allChars.length !== 1 ? "s" : ""}</span>}
         </div>
-      )}
+        <button onClick={() => setShowManage(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 12px" }}>Manage Characters</button>
+      </div>
       <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
           <thead><tr>
@@ -1233,6 +1354,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
         </table>
       </div>
       {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
+      {showManage && <ManageCharactersModal chars={allChars} onSave={(newChars) => onSaveProfile({ characters: newChars })} onClose={() => setShowManage(false)} />}
     </div>
   );
 }
@@ -1547,6 +1669,14 @@ export default function App() {
   };
   const handlePermDelete = id => { setTrash(prev => { const c = { ...prev }; delete c[id]; return c; }); };
   const handleUpdateParty = async p => { await save({ ...parties, [p.id]: p }); setSelectedParty(p); };
+  const handleBatchUpdate = async (partyArr) => {
+    const np = { ...parties };
+    partyArr.forEach(p => { np[p.id] = p; });
+    await save(np);
+    // Keep selected party in sync
+    const sel = partyArr.find(p => p.id === selectedParty?.id);
+    if (sel) setSelectedParty(sel);
+  };
   const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } };
   const openParty = p => { setSelectedParty(p); setView("party"); };
   const openCreate = (bn, d, cn) => { setCreateDefaults({ boss: bn, diff: d, char: cn }); setShowCreate(true); };
@@ -1646,9 +1776,9 @@ export default function App() {
       </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
         {view === "party" && selectedParty ? (
-          <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
+          <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onBatchUpdate={handleBatchUpdate} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
         ) : view === "characters" ? (
-          <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} onCreateSolo={handleCreateSolo} onSkipBoss={handleSkipBoss} />
+          <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} onCreateSolo={handleCreateSolo} onSkipBoss={handleSkipBoss} onSaveProfile={handleSaveProfile} />
         ) : (
           <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} />
         )}
