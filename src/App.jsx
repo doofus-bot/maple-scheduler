@@ -180,10 +180,17 @@ function ScheduleBlockJob({ charName }) {
   return <span style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontWeight: 500 }}>{info.jobName}</span>;
 }
 
-function DiffBadge({ difficulty, small }) {
+function DiffBadge({ difficulty, small, inline }) {
   const bg = DIFF_GRADIENTS[difficulty] || "#555";
   const abbr = DIFF_ABBR[difficulty] || "";
   const full = difficulty?.toUpperCase() || "";
+  const dc = DIFF_COLORS[difficulty] || "#94a3b8";
+
+  // Inline mode: minimal pill for schedule blocks
+  if (inline) {
+    return <span style={{ fontSize: 8, fontWeight: 900, padding: "1px 4px", borderRadius: 3, background: bg, color: (difficulty === "Chaos" || difficulty === "Extreme") ? dc : "#fff", border: "none", flexShrink: 0, lineHeight: 1.3, display: "inline-block" }}>{abbr}</span>;
+  }
+
   const label = small ? abbr : full;
   const sz = small ? { fontSize: 8, padding: "1px 5px", borderRadius: 3 } : { fontSize: 10, padding: "2px 8px", borderRadius: 4 };
   const base = { ...sz, fontWeight: 900, flexShrink: 0, letterSpacing: "0.5px", display: "inline-block", lineHeight: 1.4 };
@@ -1091,7 +1098,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                          <span style={{ marginLeft: 6 }}><DiffBadge difficulty={b?.difficulty} small /></span>
+                          <span style={{ marginLeft: 6 }}><DiffBadge difficulty={b?.difficulty} inline /></span>
                           {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
                         </div>
                         <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{p.members?.[0]?.charName || "\u2014"}</div>
@@ -1197,7 +1204,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                       ...(editing ? { outline: `1px dashed rgba(255,255,255,.3)` } : {}),
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <DiffBadge difficulty={b?.difficulty} small />
+                        <DiffBadge difficulty={b?.difficulty} inline />
                         <span style={{ fontSize: tiny ? 8 : 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
                       {!tiny && blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1411,10 +1418,9 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                         onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
                         onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
                         onMouseLeave={() => setHoverParty(null)}
-                        style={{ padding: "3px 6px", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                        style={{ padding: "3px 6px", borderRadius: 5, cursor: "pointer", display: "flex", alignItems: "center",
                           background: "rgba(11,14,26,.4)", border: `1px solid ${solo ? "rgba(255,255,255,.4)" : dc + "44"}` }}>
                         <DiffBadge difficulty={b?.difficulty} small />
-                        <span style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{p.members?.length}p</span>
                       </button>;
                     })()}
                     {isSkipped && <span title="Skipped" style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Skipped</span>}
@@ -1682,7 +1688,7 @@ function ShareView({ token }) {
                       transition: "opacity .3s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3, overflow: "hidden" }}>
-                        <DiffBadge difficulty={b?.difficulty} small />
+                        <DiffBadge difficulty={b?.difficulty} inline />
                         <span style={{ fontSize: 10, fontWeight: 700, color: solo ? "#fca5a5" : "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b?.bossName}</span>
                       </div>
                       {blockH > 28 && <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
