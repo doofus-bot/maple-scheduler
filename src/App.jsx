@@ -140,7 +140,7 @@ const S = {
 function CharAvatar({ name, size = 36, style: extra }) {
   const info = useCharInfo(name);
   const img = info?.imgUrl;
-  if (img) return <img src={img} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid #1e2440", ...extra }} />;
+  if (img) return <img src={img} alt={name} style={{ width: size, height: size, objectFit: "contain", ...extra }} />;
   return <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg,${ACCENT},#1d4ed8)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, fontWeight: 700, color: "#fff", ...extra }}>{(name?.[0] || "?").toUpperCase()}</div>;
 }
 
@@ -1318,7 +1318,13 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
           <thead><tr>
             <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-            {chars.map(c => <th key={c} style={{ padding: "12px 8px", textAlign: "center", fontSize: 13, color: ACCENT, fontWeight: 700, borderBottom: "2px solid rgba(30,36,64,.6)", fontFamily: "'Fredoka',sans-serif", minWidth: 100 }}>{c}</th>)}
+            {chars.map(c => <th key={c} style={{ padding: "8px 4px", textAlign: "center", borderBottom: "2px solid rgba(30,36,64,.6)", minWidth: 100, verticalAlign: "bottom" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <CharAvatar name={c} size={40} />
+                <span style={{ fontSize: 12, color: ACCENT, fontWeight: 700, fontFamily: "'Fredoka',sans-serif" }}>{c}</span>
+                <CharJobLevel name={c} />
+              </div>
+            </th>)}
           </tr></thead>
           <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
             <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
