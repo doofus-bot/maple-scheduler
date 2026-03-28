@@ -534,7 +534,7 @@ function runNotificationCheck() {
               title = `${diff} ${bossName} — ${minsBefore}min`;
             }
 
-            const timeField = `<t:${startUnix}:R> — <t:${startUnix}:F>\n<t:${startUnix}:t> – <t:${endUnix}:t>`;
+            const timeField = `<t:${startUnix}:R> — <t:${startUnix}:F>`;
             const partyField = partySize > 1 ? `**${member.charName || "—"}** | ${partySize}p — ${memberNames}` : `**${member.charName || "—"}** | Solo`;
 
             const embed = {
