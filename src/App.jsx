@@ -773,7 +773,7 @@ function ProfileModal({ user, onClose, onSave }) {
   const [avail, setAvail] = useState(user.availability || {});
   const [deletedChars, setDeletedChars] = useState([]);
   const [notifEnabled, setNotifEnabled] = useState(user.notifications?.enabled || false);
-  const [notifTimings, setNotifTimings] = useState(user.notifications?.timings || [60, 30, 5]);
+  const [notifTimings, setNotifTimings] = useState(user.notifications?.timings || [15, 0]);
   const [notifSolos, setNotifSolos] = useState(user.notifications?.solos || false);
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
