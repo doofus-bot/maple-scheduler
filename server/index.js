@@ -355,8 +355,6 @@ db.exec(`
 `);
 // Clean old entries (>24 hours — weekly bosses get fresh notifications each week)
 try { db.prepare("DELETE FROM notifications_sent WHERE sent_at < datetime('now', '-24 hours')").run(); } catch {}
-// Clear all on deploy to reset from key format changes
-try { db.prepare("DELETE FROM notifications_sent").run(); } catch {}
 
 const NOTIFY_INTERVALS = [60, 30, 15, 10, 5, 0]; // minutes before boss time
 
@@ -548,6 +546,12 @@ function runNotificationCheck() {
               footer: { text: resetStr },
             };
             if (gif) embed.thumbnail = { url: gif };
+
+            // Check if this is the user's first notification
+            const prevNotif = db.prepare("SELECT id FROM notifications_sent WHERE id LIKE ? LIMIT 1").get(`%_${realDiscordId}_%`);
+            if (!prevNotif) {
+              embed.fields.push({ name: "\u200b", value: `[Notification settings](${siteUrl}) can be changed in Profile Settings`, inline: false });
+            }
 
             const msgPayload = { embeds: [embed] };
 
