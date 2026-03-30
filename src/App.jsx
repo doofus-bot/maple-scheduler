@@ -131,7 +131,7 @@ function useCharInfo(name) {
 
 /* ═══ STYLES ═══ */
 const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Comfortaa:wght@300;400;500;600;700&display=swap');
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}@keyframes slideFromLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}@keyframes slideFromRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
 *{box-sizing:border-box;margin:0;padding:0}body{background:#0b0e1a}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
 input::placeholder,textarea::placeholder{color:#475569}select option{background:#141829;color:#e2e8f0}`;
 
@@ -535,13 +535,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
           <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
           {party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
-            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
-            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
-            return <>
-              <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{run.localDay} ·</span>
-              <span style={{ fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{run.resetLabel}</span>
-              <button onClick={copyIt} title="Copy Discord timestamps" style={{ width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "✓" : "📋"}</button>
-            </>;
+            return <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{run.localDay} · <span style={{ color: ACCENT, fontWeight: 700 }}>{run.resetLabel}</span></span>;
           })()}
           {party.utcDay == null && <span style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Unscheduled</span>}
         </div>
@@ -564,15 +558,31 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>Cancel</button>
             </>}
           </>}
-          {!isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${expandSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: expandSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: expandSchedule ? ACCENT : "#94a3b8" }}>{expandSchedule ? "✓ Expanded" : "Expand Schedule"}</button>}
-          {isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{expandSchedule ? "Collapse Schedule" : "Expand Schedule"}</button>}
+          {!isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${expandSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: expandSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: expandSchedule ? ACCENT : "#94a3b8" }}>{expandSchedule ? "✓ Schedules" : "View Schedules"}</button>}
+          {isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{expandSchedule ? "Hide Schedule" : "View Schedules"}</button>}
           {!isLead && isMember && <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave</button>}
         </div>
       </div>
 
+      {/* Timestamp box */}
+      {party.utcDay != null && (() => {
+        const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
+        const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
+        const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+        return <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
+            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+              <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
+            </div>
+          </div>
+          <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "✓" : "📋"}</button>
+        </div>;
+      })()}
+
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         {/* LEFT — Party Members & Drops */}
-        <div style={{ width: expandSchedule ? 240 : 420, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, transition: "width .2s ease" }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           {drops.length > 0 && <div style={{ ...BACKDROP, padding: "8px 12px" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {drops.map((drop, di) => {
@@ -599,7 +609,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎ Edit Members"}</button>}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: expandSchedule ? "1fr 1fr" : "repeat(3, 1fr)", gap: expandSchedule ? 6 : 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: expandSchedule ? 6 : 10 }}>
             {party.members?.map((m, i) => {
               const isMe = m.userId === currentUser?.id;
               const myChars = currentUser?.characters || [];
@@ -610,6 +620,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               const availChars = isMe ? myChars : memberChars;
               const charOptions = [...new Set([...availChars, m.charName])];
               const showDropdown = canEditSelf || (canEditAsLead && charOptions.length >= 1);
+              const sz = expandSchedule; // compact mode
               const switchChar = (newName) => {
                 const oldName = m.charName;
                 if (newName === oldName) return;
@@ -695,8 +706,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
           )}
         </div>
 
-        {/* RIGHT — Schedule */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        {/* RIGHT — Schedule (slides in when expanded) */}
+        {expandSchedule && <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, animation: "fadeIn .2s ease" }}>
           <div style={{ ...BACKDROP, padding: "8px 12px" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Show Schedules</div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -755,7 +766,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               </div>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
       {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
@@ -1840,6 +1851,16 @@ export default function App() {
   const [selectedParty, setSelectedParty] = useState(null);
   const [trash, setTrash] = useState({});
   const [view, setView] = useState("schedule");
+  const [slideDir, setSlideDir] = useState(null);
+  const [slideKey, setSlideKey] = useState(0);
+  const navTo = (newView) => {
+    if (newView === view) return;
+    const viewOrder = { schedule: 0, characters: 1, party: 2 };
+    setSlideDir(viewOrder[newView] > viewOrder[view] ? "right" : "left");
+    setSlideKey(k => k + 1);
+    setView(newView);
+    setSelectedParty(null);
+  };
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -1905,7 +1926,7 @@ export default function App() {
     if (sel) setSelectedParty(sel);
   };
   const handleSaveProfile = async s => { try { const u = await API.patch("/api/me", s); setUser(p => ({ ...p, ...u })); } catch { setUser(p => ({ ...p, ...s })); } };
-  const openParty = p => { setSelectedParty(p); setView("party"); };
+  const openParty = p => { setSelectedParty(p); setSlideDir("right"); setSlideKey(k => k + 1); setView("party"); };
   const openCreate = (bn, d, cn) => { setCreateDefaults({ boss: bn, diff: d, char: cn }); setShowCreate(true); };
   const handleCreateSolo = async (bossName, charName) => {
     const bossObj = BOSSES.find(b => b.name === bossName);
@@ -1978,22 +1999,24 @@ export default function App() {
       <style>{globalCSS}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "radial-gradient(ellipse at center,rgba(0,0,0,.2) 0%,rgba(0,0,0,.65) 100%)" }} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", borderBottom: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.88)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50, height: 54 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src="/logo.png?v=4" alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
+        <div onClick={() => navTo("schedule")} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}><img src="/logo.png?v=4" alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "contain" }} /><span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>Maple Scheduler</span></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
-          <button onClick={() => { setView("schedule"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
-          <button onClick={() => { setView("characters"); setSelectedParty(null); }} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
+          <button onClick={() => navTo("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
+          <button onClick={() => navTo("characters")} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
         </div>
       </div>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1, overflow: "hidden" }}>
+        <div key={slideKey} style={{ animation: slideDir ? `${slideDir === "right" ? "slideFromRight" : "slideFromLeft"} .25s ease` : "none" }}>
         {view === "party" && selectedParty ? (
-          <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onBatchUpdate={handleBatchUpdate} onDelete={handleDelete} onBack={() => { setView("schedule"); setSelectedParty(null); }} />
+          <PartyPage party={selectedParty} allParties={parties} allUsers={allUsers} currentUser={user} onUpdate={handleUpdateParty} onBatchUpdate={handleBatchUpdate} onDelete={handleDelete} onBack={() => navTo("schedule")} />
         ) : view === "characters" ? (
           <CharactersView parties={parties} user={user} onCreateParty={openCreate} onClickParty={openParty} onCreateSolo={handleCreateSolo} onSkipBoss={handleSkipBoss} onSaveProfile={handleSaveProfile} />
         ) : (
           <ScheduleView parties={parties} user={user} onClickParty={openParty} onUpdateParty={handleUpdateParty} trash={trash} onRecover={handleRecover} onPermDelete={handlePermDelete} onShare={generateShare} shareCopied={shareCopied} />
         )}
+        </div>
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
       {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} onSave={handleSaveProfile} />}
