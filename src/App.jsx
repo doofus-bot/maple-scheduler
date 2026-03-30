@@ -797,6 +797,8 @@ function ProfileModal({ user, onClose, onSave }) {
   const [notifEnabled, setNotifEnabled] = useState(user.notifications?.enabled || false);
   const [notifTimings, setNotifTimings] = useState(user.notifications?.timings || [15, 0]);
   const [notifSolos, setNotifSolos] = useState(user.notifications?.solos || false);
+  const [dailyEnabled, setDailyEnabled] = useState(user.notifications?.daily?.enabled || false);
+  const [dailyTime, setDailyTime] = useState(user.notifications?.daily?.time || "08:00");
   const [anchor, setAnchor] = useState(null);
   const [hover, setHover] = useState(null);
   const [mode, setMode] = useState(null);
@@ -810,7 +812,7 @@ function ProfileModal({ user, onClose, onSave }) {
     setSaving(true);
     saveTimer.current = setTimeout(() => { onSave(data); setSaving(false); }, 400);
   }, [onSave]);
-  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail, notifications: { enabled: notifEnabled, timings: notifTimings, solos: notifSolos } }); }, [tz, chars, avail, notifEnabled, notifTimings, notifSolos]);
+  useEffect(() => { doSave({ timezone: tz, characters: chars, availability: avail, notifications: { enabled: notifEnabled, timings: notifTimings, solos: notifSolos, daily: { enabled: dailyEnabled, time: dailyTime } } }); }, [tz, chars, avail, notifEnabled, notifTimings, notifSolos, dailyEnabled, dailyTime]);
 
   const addChar = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { setChars(p => [...p, n]); setNewChar(""); } };
   const rmChar = i => {
@@ -934,62 +936,97 @@ function ProfileModal({ user, onClose, onSave }) {
               style={{ padding: "6px 16px", borderRadius: 8, border: `1px solid ${notifEnabled ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", fontSize: 12, background: notifEnabled ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifEnabled ? "#10b981" : "#64748b" }}>
               {notifEnabled ? "✓ Enabled" : "Disabled"}
             </button>
-            <span style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Discord notification before Party Bossing</span>
           </div>
-          {notifEnabled && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {[{ label: "1 hour", mins: 60 }, { label: "30 min", mins: 30 }, { label: "15 min", mins: 15 }, { label: "10 min", mins: 10 }, { label: "5 min", mins: 5 }, { label: "At start", mins: 0 }].map(opt => {
-              const active = notifTimings.includes(opt.mins);
-              return <button key={opt.mins} onClick={() => setNotifTimings(prev => active ? prev.filter(t => t !== opt.mins) : [...prev, opt.mins])}
-                style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${active ? "rgba(37,99,235,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: active ? "rgba(37,99,235,.15)" : "rgba(255,255,255,.03)", color: active ? ACCENT : "#64748b" }}>
-                {opt.label}
-              </button>;
-            })}
-            {/* Custom minutes */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input type="number" min="1" max="120" placeholder="min" style={{ ...S.input, width: 52, fontSize: 11, padding: "5px 6px", textAlign: "center" }}
-                onKeyDown={e => {
-                  if (e.key === "Enter") {
-                    const v = parseInt(e.target.value);
-                    if (v > 0 && v <= 120 && !notifTimings.includes(v)) { setNotifTimings(prev => [...prev, v]); e.target.value = ""; }
-                  }
-                }} />
-              <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>+ custom</span>
+
+          {/* All sub-settings greyed out when disabled */}
+          <div style={{ opacity: notifEnabled ? 1 : .35, pointerEvents: notifEnabled ? "auto" : "none", transition: "opacity .2s" }}>
+            {/* Party Boss Reminders */}
+            <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(30,36,64,.3)", background: "rgba(11,14,26,.3)", marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Party Boss Reminders</div>
+              <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif", display: "block", marginBottom: 8 }}>Discord notification before Party Bossing</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {[{ label: "1 hour", mins: 60 }, { label: "30 min", mins: 30 }, { label: "15 min", mins: 15 }, { label: "10 min", mins: 10 }, { label: "5 min", mins: 5 }, { label: "At start", mins: 0 }].map(opt => {
+                  const active = notifTimings.includes(opt.mins);
+                  return <button key={opt.mins} onClick={() => setNotifTimings(prev => active ? prev.filter(t => t !== opt.mins) : [...prev, opt.mins])}
+                    style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${active ? "rgba(37,99,235,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: active ? "rgba(37,99,235,.15)" : "rgba(255,255,255,.03)", color: active ? ACCENT : "#64748b" }}>
+                    {opt.label}
+                  </button>;
+                })}
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input type="number" min="1" max="120" placeholder="min" style={{ ...S.input, width: 52, fontSize: 11, padding: "5px 6px", textAlign: "center" }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const v = parseInt(e.target.value);
+                        if (v > 0 && v <= 120 && !notifTimings.includes(v)) { setNotifTimings(prev => [...prev, v]); e.target.value = ""; }
+                      }
+                    }} />
+                  <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>+ custom</span>
+                </div>
+              </div>
+              {notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                  {notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).sort((a, b) => b - a).map(t => (
+                    <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 5, background: "rgba(37,99,235,.15)", border: "1px solid rgba(37,99,235,.3)", fontSize: 10, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>
+                      {t}m
+                      <button onClick={() => setNotifTimings(prev => prev.filter(x => x !== t))} style={{ background: "none", border: "none", cursor: "pointer", color: "#f87171", fontSize: 10, padding: 0, lineHeight: 1 }}>{"\u2715"}</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <button onClick={() => setNotifSolos(!notifSolos)}
+                  style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${notifSolos ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: notifSolos ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifSolos ? "#10b981" : "#64748b" }}>
+                  {notifSolos ? "✓ Solo reminders" : "Solo reminders off"}
+                </button>
+                <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Discord notification at start time for Solo Bossing</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <button onClick={async () => {
+                  try {
+                    const r = await fetch("/api/me/test-notification", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
+                    const d = await r.json();
+                    if (d.success) alert("✅ Test DM sent! Check your Discord.");
+                    else alert("❌ Failed: " + (d.step || "") + " " + (d.status || "") + " " + (d.body || d.error || ""));
+                  } catch (e) { alert("❌ Error: " + e.message); }
+                }}
+                  style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(245,158,11,.3)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: "rgba(245,158,11,.1)", color: "#f59e0b" }}>
+                  🧪 Test DM
+                </button>
+              </div>
             </div>
-          </div>}
-          {/* Show active custom timings as removable pills */}
-          {notifEnabled && notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).length > 0 && (
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-              {notifTimings.filter(t => ![60, 30, 15, 10, 5, 0].includes(t)).sort((a, b) => b - a).map(t => (
-                <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 5, background: "rgba(37,99,235,.15)", border: "1px solid rgba(37,99,235,.3)", fontSize: 10, color: ACCENT, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>
-                  {t}m
-                  <button onClick={() => setNotifTimings(prev => prev.filter(x => x !== t))} style={{ background: "none", border: "none", cursor: "pointer", color: "#f87171", fontSize: 10, padding: 0, lineHeight: 1 }}>{"\u2715"}</button>
-                </span>
-              ))}
+
+            {/* Daily Reminder */}
+            <div style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(30,36,64,.3)", background: "rgba(11,14,26,.3)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Daily Reminder</div>
+              <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif", display: "block", marginBottom: 8 }}>Summary of upcoming bosses sent once a day</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <button onClick={() => setDailyEnabled(!dailyEnabled)}
+                  style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${dailyEnabled ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: dailyEnabled ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: dailyEnabled ? "#10b981" : "#64748b" }}>
+                  {dailyEnabled ? "✓ On" : "Off"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>Send at</span>
+                  <input type="time" value={dailyTime} onChange={e => setDailyTime(e.target.value)}
+                    style={{ ...S.input, width: 100, fontSize: 11, padding: "4px 8px", textAlign: "center", opacity: dailyEnabled ? 1 : .4 }} />
+                  <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>your local time</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={async () => {
+                  try {
+                    const r = await fetch("/api/me/test-daily", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
+                    const d = await r.json();
+                    if (d.success) alert("✅ Daily summary sent! Check your Discord.");
+                    else if (d.noBosses) alert("ℹ️ No bosses scheduled in the next 24 hours — no summary to send.");
+                    else alert("❌ Failed: " + (d.step || "") + " " + (d.status || "") + " " + (d.body || d.error || ""));
+                  } catch (e) { alert("❌ Error: " + e.message); }
+                }}
+                  style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(245,158,11,.3)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: "rgba(245,158,11,.1)", color: "#f59e0b" }}>
+                  🧪 Test Daily
+                </button>
+              </div>
             </div>
-          )}
-          {/* Solo boss notifications */}
-          {notifEnabled && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-            <button onClick={() => setNotifSolos(!notifSolos)}
-              style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${notifSolos ? "rgba(34,197,94,.4)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: notifSolos ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.03)", color: notifSolos ? "#10b981" : "#64748b" }}>
-              {notifSolos ? "✓ Solo reminders" : "Solo reminders off"}
-            </button>
-            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Discord notification at start time for Solo Bossing</span>
-          </div>}
-          {/* Test notification */}
-          {notifEnabled && <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-            <button onClick={async () => {
-              try {
-                const r = await fetch("/api/me/test-notification", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" });
-                const d = await r.json();
-                if (d.success) alert("✅ Test DM sent! Check your Discord.");
-                else alert("❌ Failed: " + (d.step || "") + " " + (d.status || "") + " " + (d.body || d.error || ""));
-              } catch (e) { alert("❌ Error: " + e.message); }
-            }}
-              style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(245,158,11,.3)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", fontSize: 11, background: "rgba(245,158,11,.1)", color: "#f59e0b" }}>
-              🧪 Test DM
-            </button>
-            <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Send a test message to your Discord</span>
-          </div>}
+          </div>
         </div>
         {/* Logout */}
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(30,36,64,.4)" }}>
