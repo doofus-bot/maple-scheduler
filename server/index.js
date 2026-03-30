@@ -332,6 +332,114 @@ app.post("/api/me/test-notification", requireAuth, async (req, res) => {
 });
 
 /* ════════════════════════════════════════
+   DAILY SUMMARY BUILDER
+   ════════════════════════════════════════ */
+const DIFF_ABBR_SERVER = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
+
+function buildDailySummary(userId, username, userTZ) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return null;
+
+  const now = new Date();
+  const nowUTC = now.getUTCDay();
+  const nowDay = (nowUTC + 6) % 7;
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+  // Load parties
+  const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
+  const parties = JSON.parse(row?.data || "{}");
+  const users = db.prepare("SELECT id, username, timezone FROM users").all();
+
+  // Find all bosses this user is in within the next 24 hours
+  const upcoming = [];
+
+  for (const [pid, party] of Object.entries(parties)) {
+    if (party.skipped || party.utcDay == null) continue;
+    const isMember = party.members?.some(m => m.userId === userId || m.userId === username);
+    if (!isMember) continue;
+
+    // Convert stored local time to UTC using leader's TZ
+    const leaderId = party.leaderId;
+    const leaderUser = users.find(u => u.id === leaderId);
+    const leaderTZ = leaderUser?.timezone || "America/New_York";
+    const refDate = new Date();
+    const localStr = refDate.toLocaleString("en-US", { timeZone: leaderTZ });
+    const localDate = new Date(localStr);
+    const tzOffsetMs = refDate.getTime() - localDate.getTime();
+    const tzOffsetMins = Math.round(tzOffsetMs / 60000);
+
+    let bossUTCMin = (party.utcHour * 60 + party.utcMin) + tzOffsetMins;
+    let bossDay = party.utcDay;
+    while (bossUTCMin >= 24 * 60) { bossUTCMin -= 24 * 60; bossDay = (bossDay + 1) % 7; }
+    while (bossUTCMin < 0) { bossUTCMin += 24 * 60; bossDay = (bossDay - 1 + 7) % 7; }
+
+    // Calculate minutes from now to this boss
+    let minsUntil = (bossDay - nowDay) * 24 * 60 + (bossUTCMin - nowMin);
+    if (minsUntil < 0) minsUntil += 7 * 24 * 60;
+    if (minsUntil > 24 * 60) continue; // skip if > 24 hours away
+
+    // Build unix timestamp
+    const bossDate = new Date(now);
+    const daysUntil = ((bossDay - nowDay) % 7 + 7) % 7;
+    bossDate.setUTCDate(bossDate.getUTCDate() + (daysUntil === 0 && nowMin > bossUTCMin + 2 ? 7 : daysUntil));
+    bossDate.setUTCHours(Math.floor(bossUTCMin / 60), bossUTCMin % 60, 0, 0);
+    const startUnix = Math.floor(bossDate.getTime() / 1000);
+
+    // Reset relation
+    const minsFromReset = party.utcHour * 60 + party.utcMin;
+    const minsToReset = 24 * 60 - minsFromReset;
+    const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
+    const absMins = useNeg ? minsToReset : minsFromReset;
+    const rH = Math.floor(absMins / 60), rM = absMins % 60;
+    const resetStr = "Reset " + (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
+
+    const bossName = party.bosses?.[0]?.bossName || "Boss";
+    const diff = party.bosses?.[0]?.difficulty || "";
+    const charName = party.members?.find(m => m.userId === userId || m.userId === username)?.charName || "—";
+
+    upcoming.push({ startUnix, minsUntil, bossName, diff, charName, resetStr, pid });
+  }
+
+  if (upcoming.length === 0) return null;
+
+  // Sort chronologically
+  upcoming.sort((a, b) => a.startUnix - b.startUnix);
+
+  // Greeting based on user's local time
+  const userNow = new Date(now.toLocaleString("en-US", { timeZone: userTZ || "America/New_York" }));
+  const userHour = userNow.getHours();
+  const greeting = userHour < 12 ? "Morning" : userHour < 17 ? "Afternoon" : "Evening";
+
+  // Build embed
+  const lines = upcoming.map(b => {
+    const da = DIFF_ABBR_SERVER[b.diff] || "";
+    return `<t:${b.startUnix}:t> <t:${b.startUnix}:R> · ${b.resetStr} · **${b.charName}** · **${da} ${b.bossName}**`;
+  });
+
+  const embed = {
+    title: `Good ${greeting}, ${username}`,
+    description: `You have **${upcoming.length}** boss${upcoming.length !== 1 ? "es" : ""} in the next 24 hours.\n\n${lines.join("\n")}`,
+    color: 0x2563eb,
+    footer: { text: "Maple Scheduler · Daily Reminder" },
+  };
+
+  return { embeds: [embed] };
+}
+
+app.post("/api/me/test-daily", requireAuth, async (req, res) => {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return res.status(500).json({ error: "DISCORD_BOT_TOKEN not set" });
+  try {
+    const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    const userTZ = u?.timezone || "America/New_York";
+    const payload = buildDailySummary(req.user.id, u?.username, userTZ);
+    if (!payload) return res.json({ success: false, noBosses: true });
+    await sendDiscordDM(req.user.id, payload, 24 * 60 * 60 * 1000);
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, step: "exception", error: err.message }); }
+});
+
+/* ════════════════════════════════════════
    SERVE FRONTEND
    ════════════════════════════════════════ */
 // Always serve public/ for logo.png etc
@@ -358,7 +466,7 @@ try { db.prepare("DELETE FROM notifications_sent WHERE sent_at < datetime('now',
 
 const NOTIFY_INTERVALS = [60, 30, 15, 10, 5, 0]; // minutes before boss time
 
-async function sendDiscordDM(userId, payload) {
+async function sendDiscordDM(userId, payload, deleteAfterMs = 30 * 60 * 1000) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) return;
   const body = typeof payload === "string" ? { content: payload } : payload;
@@ -388,7 +496,7 @@ async function sendDiscordDM(userId, payload) {
             headers: { Authorization: `Bot ${token}` },
           });
         } catch {}
-      }, 30 * 60 * 1000);
+      }, deleteAfterMs);
     }
   } catch (err) { console.error(`DM error for ${userId}:`, err.message); }
 }
@@ -570,5 +678,52 @@ function runNotificationCheck() {
 setInterval(runNotificationCheck, 60 * 1000);
 // Run once on startup after a short delay
 setTimeout(runNotificationCheck, 5000);
+
+/* ════════════════════════════════════════
+   DAILY REMINDER SCHEDULER
+   ════════════════════════════════════════ */
+db.exec(`CREATE TABLE IF NOT EXISTS daily_sent (id TEXT PRIMARY KEY, sent_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+try { db.prepare("DELETE FROM daily_sent WHERE sent_at < datetime('now', '-25 hours')").run(); } catch {}
+
+function runDailyCheck() {
+  if (!process.env.DISCORD_BOT_TOKEN) return;
+  try {
+    const now = new Date();
+    const users = db.prepare("SELECT id, username, settings, timezone FROM users").all();
+
+    for (const u of users) {
+      const s = JSON.parse(u.settings || "{}");
+      if (!s.notifications?.enabled || !s.notifications?.daily?.enabled) continue;
+      const dailyTime = s.notifications.daily.time || "08:00";
+
+      // Convert user's desired local time to UTC
+      const userTZ = u.timezone || "America/New_York";
+      const [dH, dM] = dailyTime.split(":").map(Number);
+
+      // Calculate what time it is in the user's timezone
+      const userNow = new Date(now.toLocaleString("en-US", { timeZone: userTZ }));
+      const userNowMin = userNow.getHours() * 60 + userNow.getMinutes();
+      const targetMin = dH * 60 + dM;
+
+      // Check if within 1-minute window
+      if (Math.abs(userNowMin - targetMin) > 1) continue;
+
+      // Dedup — one per user per day
+      const dateKey = `${u.id}_${now.getUTCFullYear()}_${now.getUTCMonth()}_${now.getUTCDate()}`;
+      const already = db.prepare("SELECT id FROM daily_sent WHERE id = ?").get(dateKey);
+      if (already) continue;
+
+      const payload = buildDailySummary(u.id, u.username, userTZ);
+      if (!payload) continue; // no bosses → skip
+
+      sendDiscordDM(u.id, payload, 24 * 60 * 60 * 1000);
+      db.prepare("INSERT OR IGNORE INTO daily_sent (id) VALUES (?)").run(dateKey);
+      console.log(`📅 Daily summary sent to ${u.username}`);
+    }
+  } catch (err) { console.error("Daily check error:", err); }
+}
+
+setInterval(runDailyCheck, 60 * 1000);
+setTimeout(runDailyCheck, 8000);
 
 app.listen(PORT, () => console.log(`🍄 Maple Scheduler running on port ${PORT}`));
