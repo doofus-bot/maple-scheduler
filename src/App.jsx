@@ -487,7 +487,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId) || { eligible: [] }; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
   const setPrioFn = (dropId, userId, pos) => { const dr = party.drops?.find(d => d.id === dropId) || { priority: [] }; let p = [...(dr.priority || [])].filter(x => x !== userId); if (pos > 0) p.splice(pos - 1, 0, userId); updateDrop(dropId, "priority", p); };
 
-  const [showSchedule, setShowSchedule] = useState(false);
+  const [expandSchedule, setExpandSchedule] = useState(false);
   const [schedMembers, setSchedMembers] = useState(() => (party.members || []).reduce((o, m) => { o[m.userId] = true; return o; }, {}));
   const toggleSchedMember = (uid) => setSchedMembers(prev => ({ ...prev, [uid]: !prev[uid] }));
 
@@ -544,7 +544,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
               if (settingTime && timeAnchor) onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
               setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
-              if (!showSchedule) setShowSchedule(true);
+              if (!expandSchedule) setExpandSchedule(true);
             }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
               <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
@@ -558,15 +558,139 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>Cancel</button>
             </>}
           </>}
-          {!isLead && <button onClick={() => setShowSchedule(!showSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${showSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: showSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: showSchedule ? ACCENT : "#94a3b8" }}>{showSchedule ? "✓ Schedules" : "View Schedules"}</button>}
-          {isLead && <button onClick={() => setShowSchedule(!showSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{showSchedule ? "Hide Schedule" : "View Schedules"}</button>}
+          {!isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${expandSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: expandSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: expandSchedule ? ACCENT : "#94a3b8" }}>{expandSchedule ? "✓ Expanded" : "Expand Schedule"}</button>}
+          {isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{expandSchedule ? "Collapse Schedule" : "Expand Schedule"}</button>}
           {!isLead && isMember && <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave</button>}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        {/* SCHEDULE PANEL (slides in from left) */}
-        {showSchedule && <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, animation: "fadeIn .2s ease" }}>
+        {/* LEFT — Party Members & Drops */}
+        <div style={{ width: expandSchedule ? 240 : 420, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, transition: "width .2s ease" }}>
+          {drops.length > 0 && <div style={{ ...BACKDROP, padding: "8px 12px" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {drops.map((drop, di) => {
+                const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null };
+                const did = pd.id || `d${di}`;
+                return <div key={di} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
+                  <span style={{ fontSize: expandSchedule ? 9 : 11, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
+                  {isLead && <div style={{ display: "flex", gap: 3 }}>
+                    {["blink", "priority"].map(mt => (
+                      <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
+                        style={{ ...S.btnGhost, fontSize: expandSchedule ? 8 : 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
+                        {mt === "blink" ? "Blink" : "Prio"}
+                      </button>
+                    ))}
+                  </div>}
+                  {!isLead && pd.method && <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{pd.method === "blink" ? "Blink" : "Priority"}</span>}
+                </div>;
+              })}
+            </div>
+          </div>}
+
+          <div style={{ ...BACKDROP, padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
+            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎ Edit Members"}</button>}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: expandSchedule ? "1fr 1fr" : "repeat(3, 1fr)", gap: expandSchedule ? 6 : 10 }}>
+            {party.members?.map((m, i) => {
+              const isMe = m.userId === currentUser?.id;
+              const myChars = currentUser?.characters || [];
+              const memberUser = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
+              const memberChars = memberUser?.characters || [];
+              const canEditSelf = isMe && myChars.length > 1;
+              const canEditAsLead = isLead && editMembers && !isMe;
+              const availChars = isMe ? myChars : memberChars;
+              const charOptions = [...new Set([...availChars, m.charName])];
+              const showDropdown = canEditSelf || (canEditAsLead && charOptions.length >= 1);
+              const switchChar = (newName) => {
+                const oldName = m.charName;
+                if (newName === oldName) return;
+                const bossKey = boss?.bossName + "|" + boss?.difficulty;
+                const otherParty = Object.values(allParties).find(op =>
+                  op.id !== party.id && !op.skipped &&
+                  op.bosses?.some(b => b.bossName + "|" + b.difficulty === bossKey) &&
+                  op.members?.some(om => om.charName?.toLowerCase() === newName.toLowerCase())
+                );
+                if (otherParty && onBatchUpdate) {
+                  const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
+                    om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
+                  )};
+                  const updatedThis = { ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) };
+                  onBatchUpdate([updatedThis, updatedOther]);
+                } else {
+                  onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) });
+                }
+              };
+              const avatarSz = expandSchedule ? 40 : 64;
+              const nameSz = expandSchedule ? 10 : 13;
+              return (
+                <div key={i} style={{ padding: expandSchedule ? "8px 6px 6px" : "14px 12px 10px", borderRadius: expandSchedule ? 8 : 12, background: "rgba(11,14,26,.9)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+                  {editMembers && isLead && i !== 0 && (
+                    <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
+                      <button onClick={() => passLead(i)} title="Make lead" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(37,99,235,.15)", color: ACCENT, fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
+                      <button onClick={() => removeMember(i)} title="Remove" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 4, marginBottom: 3, minHeight: 14 }}>
+                    {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
+                    {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 7 }}>TEMP</span>}
+                    {isMe && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 3, background: "rgba(37,99,235,.1)", color: ACCENT }}>YOU</span>}
+                  </div>
+                  <CharAvatar name={m.charName} size={avatarSz} />
+                  <div style={{ width: "100%", textAlign: "center", marginTop: 4 }}>
+                    {showDropdown ? (
+                      <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: nameSz, padding: "2px 4px", paddingRight: 16, width: "100%", backgroundPosition: "right 3px center", borderRadius: 5, textAlign: "center", fontWeight: 700 }}>
+                        {charOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ fontSize: nameSz, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.charName}</div>
+                    )}
+                  </div>
+                  <CharJobLevel name={m.charName} />
+                  {!expandSchedule && <div style={{ width: "100%", marginTop: 6 }}>
+                    {drops.map((drop, di) => {
+                      const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
+                      const did = pd.id || `d${di}`;
+                      const isE = pd.eligible?.includes(m.userId);
+                      const pp = pd.priority?.indexOf(m.userId);
+                      const hasPrio = pp != null && pp >= 0;
+                      if (!pd.method) return null;
+                      return (
+                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
+                          <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
+                          {pd.method === "priority" && (isLead ? (
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 36, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
+                              <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
+                            </select>
+                          ) : (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "2px 6px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+
+          {editMembers && isLead && party.members.length < maxP && (
+            <div style={{ ...BACKDROP, padding: 12 }}>
+              <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) addMemberByDiscord(); }} />
+                <button onClick={() => addDiscord.trim() && addMemberByDiscord()} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
+              </div>
+              <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "5px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT — Schedule */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
           <div style={{ ...BACKDROP, padding: "8px 12px" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Show Schedules</div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -625,128 +749,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               </div>
             </div>
           </div>
-        </div>}
-
-        {/* MAIN CONTENT — Party Members & Drops */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-          {drops.length > 0 && <div style={{ ...BACKDROP, padding: "8px 12px" }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {drops.map((drop, di) => {
-                const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null };
-                const did = pd.id || `d${di}`;
-                return <div key={di} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
-                  {isLead && <div style={{ display: "flex", gap: 3 }}>
-                    {["blink", "priority"].map(mt => (
-                      <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
-                        style={{ ...S.btnGhost, fontSize: 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
-                        {mt === "blink" ? "Blink" : "Prio"}
-                      </button>
-                    ))}
-                  </div>}
-                  {!isLead && pd.method && <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{pd.method === "blink" ? "Blink" : "Priority"}</span>}
-                </div>;
-              })}
-            </div>
-          </div>}
-
-          <div style={{ ...BACKDROP, padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
-            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎ Edit Members"}</button>}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {party.members?.map((m, i) => {
-              const isMe = m.userId === currentUser?.id;
-              const myChars = currentUser?.characters || [];
-              const memberUser = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
-              const memberChars = memberUser?.characters || [];
-              const canEditSelf = isMe && myChars.length > 1;
-              const canEditAsLead = isLead && editMembers && !isMe;
-              const availChars = isMe ? myChars : memberChars;
-              const charOptions = [...new Set([...availChars, m.charName])];
-              const showDropdown = canEditSelf || (canEditAsLead && charOptions.length >= 1);
-              const switchChar = (newName) => {
-                const oldName = m.charName;
-                if (newName === oldName) return;
-                const bossKey = boss?.bossName + "|" + boss?.difficulty;
-                const otherParty = Object.values(allParties).find(op =>
-                  op.id !== party.id && !op.skipped &&
-                  op.bosses?.some(b => b.bossName + "|" + b.difficulty === bossKey) &&
-                  op.members?.some(om => om.charName?.toLowerCase() === newName.toLowerCase())
-                );
-                if (otherParty && onBatchUpdate) {
-                  const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
-                    om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
-                  )};
-                  const updatedThis = { ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) };
-                  onBatchUpdate([updatedThis, updatedOther]);
-                } else {
-                  onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) });
-                }
-              };
-              return (
-                <div key={i} style={{ padding: "14px 12px 10px", borderRadius: 12, background: "rgba(11,14,26,.5)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
-                  {editMembers && isLead && i !== 0 && (
-                    <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 3 }}>
-                      <button onClick={() => passLead(i)} title="Make lead" style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(37,99,235,.15)", color: ACCENT, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
-                      <button onClick={() => removeMember(i)} title="Remove" style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                    </div>
-                  )}
-                  <div style={{ display: "flex", gap: 4, marginBottom: 4, minHeight: 16 }}>
-                    {i === 0 && <span style={{ ...S.leadBadge, fontSize: 8, padding: "1px 6px" }}>LEAD</span>}
-                    {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 8 }}>TEMP</span>}
-                    {isMe && <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 3, background: "rgba(37,99,235,.1)", color: ACCENT }}>YOU</span>}
-                  </div>
-                  <CharAvatar name={m.charName} size={64} />
-                  <div style={{ width: "100%", textAlign: "center", marginTop: 6 }}>
-                    {showDropdown ? (
-                      <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 12, padding: "3px 6px", paddingRight: 18, width: "100%", backgroundPosition: "right 4px center", borderRadius: 6, textAlign: "center", fontWeight: 700 }}>
-                        {charOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    ) : (
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.charName}</div>
-                    )}
-                  </div>
-                  <CharJobLevel name={m.charName} />
-                  <div style={{ width: "100%", marginTop: 8 }}>
-                    {drops.map((drop, di) => {
-                      const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
-                      const did = pd.id || `d${di}`;
-                      const isE = pd.eligible?.includes(m.userId);
-                      const pp = pd.priority?.indexOf(m.userId);
-                      const hasPrio = pp != null && pp >= 0;
-                      if (!pd.method) return null;
-                      return (
-                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
-                          <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
-                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
-                          {pd.method === "priority" && (isLead ? (
-                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 36, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
-                              <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
-                            </select>
-                          ) : (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "2px 6px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {editMembers && isLead && party.members.length < maxP && (
-            <div style={{ ...BACKDROP, padding: 12 }}>
-              <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) addMemberByDiscord(); }} />
-                <button onClick={() => addDiscord.trim() && addMemberByDiscord()} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
-              </div>
-              <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "5px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
-            </div>
-          )}
         </div>
       </div>
 
