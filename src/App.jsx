@@ -564,36 +564,36 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         </div>
       </div>
 
-      {/* Timestamp box */}
-      {party.utcDay != null && (() => {
-        const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
-        const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
-        const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
-        return <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
-            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
-              <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
-            </div>
-          </div>
-          <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "✓" : "📋"}</button>
-        </div>;
-      })()}
-
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        {/* LEFT — Party Members & Drops */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* LEFT — Timestamp + Drops + Members */}
+        <div style={{ flex: expandSchedule ? 1 : 2, minWidth: 0, display: "flex", flexDirection: "column", gap: 10, transition: "flex .25s ease" }}>
+          {/* Timestamp box */}
+          {party.utcDay != null && (() => {
+            const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
+            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
+            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+            return <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
+                <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                  <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
+                </div>
+              </div>
+              <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "\u2713" : "\ud83d\udccb"}</button>
+            </div>;
+          })()}
+          {/* Drop method toggles */}
           {drops.length > 0 && <div style={{ ...BACKDROP, padding: "8px 12px" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {drops.map((drop, di) => {
                 const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null };
                 const did = pd.id || `d${di}`;
                 return <div key={di} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
-                  <span style={{ fontSize: expandSchedule ? 9 : 11, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
                   {isLead && <div style={{ display: "flex", gap: 3 }}>
                     {["blink", "priority"].map(mt => (
                       <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
-                        style={{ ...S.btnGhost, fontSize: expandSchedule ? 8 : 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
+                        style={{ ...S.btnGhost, fontSize: 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
                         {mt === "blink" ? "Blink" : "Prio"}
                       </button>
                     ))}
@@ -603,13 +603,13 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               })}
             </div>
           </div>}
-
+          {/* Party header */}
           <div style={{ ...BACKDROP, padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
-            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎ Edit Members"}</button>}
+            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "\u2713 Done" : "\u270e Edit Members"}</button>}
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: expandSchedule ? 6 : 10 }}>
+          {/* Member cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: expandSchedule ? 6 : 10, transition: "gap .25s ease" }}>
             {party.members?.map((m, i) => {
               const isMe = m.userId === currentUser?.id;
               const myChars = currentUser?.characters || [];
@@ -693,7 +693,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               );
             })}
           </div>
-
           {editMembers && isLead && party.members.length < maxP && (
             <div style={{ ...BACKDROP, padding: 12 }}>
               <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
@@ -706,22 +705,25 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
           )}
         </div>
 
-        {/* RIGHT — Schedule (slides in when expanded) */}
-        {expandSchedule && <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, animation: "fadeIn .2s ease" }}>
+        {/* RIGHT — Schedule (always visible) */}
+        <div style={{ flex: expandSchedule ? 2 : 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8, transition: "flex .25s ease" }}>
           <div style={{ ...BACKDROP, padding: "8px 12px" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Show Schedules</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Schedules</span>
+              <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 5, border: `1px solid ${expandSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: expandSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: expandSchedule ? ACCENT : "#64748b" }}>{expandSchedule ? "\u25c0 Collapse" : "Expand \u25b6"}</button>
+            </div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               {(party.members || []).map(m => {
                 const on = schedMembers[m.userId];
                 return <button key={m.userId} onClick={() => toggleSchedMember(m.userId)}
                   style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, border: `1px solid ${on ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: on ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: on ? "#10b981" : "#475569" }}>
-                  {on ? "✓" : ""} {m.charName}
+                  {on ? "\u2713" : ""} {m.charName}
                 </button>;
               })}
             </div>
           </div>
           <div style={{ ...BACKDROP, padding: 10 }}>
-            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` — ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
+            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` \u2014 ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
             <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
               onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
               <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
@@ -766,7 +768,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               </div>
             </div>
           </div>
-        </div>}
+        </div>
       </div>
 
       {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
@@ -1448,6 +1450,9 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id) || (p.skipped && p.leaderId === user.id));
   const allChars = (user.characters || []).slice(0, 12);
   const [page, setPage] = useState(0);
+  const [charSlideDir, setCharSlideDir] = useState(null);
+  const [charSlideKey, setCharSlideKey] = useState(0);
+  const goPage = (p) => { setCharSlideDir(p > page ? "right" : "left"); setCharSlideKey(k => k + 1); setPage(p); };
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
   const [showManage, setShowManage] = useState(false);
@@ -1472,19 +1477,19 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
       <div style={{ ...BACKDROP, padding: "8px 16px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {totalPages > 1 && <>
-            <button onClick={() => page > 0 && setPage(page - 1)}
+            <button onClick={() => page > 0 && goPage(page - 1)}
               style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page === 0 ? .3 : 1, cursor: page === 0 ? "default" : "pointer", pointerEvents: page === 0 ? "none" : "auto" }}>← Prev</button>
             <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>
               Page {page + 1} of {totalPages} ({allChars.length} chars)
             </span>
-            <button onClick={() => page < totalPages - 1 && setPage(page + 1)}
+            <button onClick={() => page < totalPages - 1 && goPage(page + 1)}
               style={{ ...S.btnGhost, fontSize: 11, padding: "4px 12px", opacity: page >= totalPages - 1 ? .3 : 1, cursor: page >= totalPages - 1 ? "default" : "pointer", pointerEvents: page >= totalPages - 1 ? "none" : "auto" }}>Next →</button>
           </>}
           {totalPages <= 1 && <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{allChars.length} character{allChars.length !== 1 ? "s" : ""}</span>}
         </div>
         <button onClick={() => setShowManage(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 12px" }}>Manage Characters</button>
       </div>
-      <div style={{ ...BACKDROP, padding: "4px 0", overflow: "auto" }}>
+      <div key={charSlideKey} style={{ ...BACKDROP, padding: "4px 0", overflow: "auto", animation: charSlideDir ? `${charSlideDir === "right" ? "slideFromRight" : "slideFromLeft"} .25s ease` : "none" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
           <thead><tr>
             <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
@@ -1502,7 +1507,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
               </th>;
             })}
           </tr></thead>
-          <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+          <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)", height: 48 }}>
             <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
             {chars.map(cn => {
               const p = find(cn, bn);
