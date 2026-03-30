@@ -533,11 +533,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             <DiffBadge difficulty={boss?.difficulty} small />
           )}
           <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
-          {party.utcDay != null && (() => {
-            const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
-            return <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{run.localDay} · <span style={{ color: ACCENT, fontWeight: 700 }}>{run.resetLabel}</span></span>;
-          })()}
-          {party.utcDay == null && <span style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Unscheduled</span>}
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {isLead && <>
@@ -558,8 +553,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>Cancel</button>
             </>}
           </>}
-          {!isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${expandSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: expandSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: expandSchedule ? ACCENT : "#94a3b8" }}>{expandSchedule ? "✓ Schedules" : "View Schedules"}</button>}
-          {isLead && <button onClick={() => setExpandSchedule(!expandSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{expandSchedule ? "Hide Schedule" : "View Schedules"}</button>}
           {!isLead && isMember && <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave</button>}
         </div>
       </div>
@@ -574,7 +567,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
             return <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.localDay} · {run.resetLabel}</div>
                 <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
                   <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
                 </div>
@@ -1489,36 +1482,49 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
         </div>
         <button onClick={() => setShowManage(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 12px" }}>Manage Characters</button>
       </div>
-      <div key={charSlideKey} style={{ ...BACKDROP, padding: "4px 0", overflow: "auto", animation: charSlideDir ? `${charSlideDir === "right" ? "slideFromRight" : "slideFromLeft"} .25s ease` : "none" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Comfortaa',sans-serif" }}>
-          <thead><tr>
-            <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, color: "#64748b", fontWeight: 600, borderBottom: "2px solid rgba(30,36,64,.6)", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 2, minWidth: 140 }}>Boss</th>
-            {chars.map(c => {
-              const ci = charInfoCache[c];
-              const jobStr = ci?.jobName && ci.jobName.toLowerCase() !== c.toLowerCase() ? ci.jobName : "";
-              return <th key={c} style={{ padding: "8px 4px", textAlign: "center", borderBottom: "2px solid rgba(30,36,64,.6)", minWidth: 100, verticalAlign: "bottom" }}>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <CharAvatar name={c} size={40} />
-                  <span style={{ fontSize: 12, color: ACCENT, fontWeight: 700, fontFamily: "'Fredoka',sans-serif" }}>{c}</span>
-                  <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>
-                    {ci?.level ? `Lv.${ci.level}` : ""}{jobStr ? ` ${jobStr}` : ""}
-                  </span>
-                </div>
-              </th>;
-            })}
-          </tr></thead>
-          <tbody>{BOSS_ORDER.filter(bn => bn !== "Other").map(bn => <tr key={bn} style={{ borderBottom: "1px solid rgba(30,36,64,.4)", height: 48 }}>
-            <td style={{ padding: "10px 16px", position: "sticky", left: 0, background: "rgba(11,14,26,.95)", zIndex: 1 }}><span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span></td>
-            {chars.map(cn => {
-              const p = find(cn, bn);
-              const skip = findSkip(cn, bn);
-              const isSkipped = skip && !p;
-              const lvlReq = BOSS_LEVEL_REQ[bn];
-              const charLevel = charInfoCache[cn]?.level || 0;
-              const underLevel = lvlReq && charLevel > 0 && charLevel < lvlReq;
-              const isLocked = underLevel && !unlocked[`${cn}|${bn}`] && !p;
-              return (
-                <td key={cn} style={{ padding: "6px 4px", textAlign: "center", verticalAlign: "middle", background: isSkipped ? "rgba(100,116,139,.12)" : isLocked ? "rgba(0,0,0,.15)" : "transparent", position: "relative" }}>
+      <div style={{ ...BACKDROP, padding: "4px 0", overflow: "hidden" }}>
+        <div style={{ display: "flex" }}>
+          {/* Fixed boss column */}
+          <div style={{ width: 120, flexShrink: 0, zIndex: 2 }}>
+            <div style={{ height: 80, padding: "12px 16px", display: "flex", alignItems: "flex-end", borderBottom: "2px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.95)" }}>
+              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif" }}>Boss</span>
+            </div>
+            {BOSS_ORDER.filter(bn => bn !== "Other").map(bn => (
+              <div key={bn} style={{ height: 48, padding: "0 16px", display: "flex", alignItems: "center", borderBottom: "1px solid rgba(30,36,64,.4)", background: "rgba(11,14,26,.95)" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{bn}</span>
+              </div>
+            ))}
+          </div>
+          {/* Sliding character columns */}
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <div key={charSlideKey} style={{ animation: charSlideDir ? `${charSlideDir === "right" ? "slideFromRight" : "slideFromLeft"} .25s ease` : "none" }}>
+              {/* Character headers */}
+              <div style={{ display: "flex", height: 80, borderBottom: "2px solid rgba(30,36,64,.6)" }}>
+                {chars.map(c => {
+                  const ci = charInfoCache[c];
+                  const jobStr = ci?.jobName && ci.jobName.toLowerCase() !== c.toLowerCase() ? ci.jobName : "";
+                  return <div key={c} style={{ flex: 1, minWidth: 100, padding: "8px 4px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
+                    <CharAvatar name={c} size={40} />
+                    <span style={{ fontSize: 12, color: ACCENT, fontWeight: 700, fontFamily: "'Fredoka',sans-serif" }}>{c}</span>
+                    <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>
+                      {ci?.level ? `Lv.${ci.level}` : ""}{jobStr ? ` ${jobStr}` : ""}
+                    </span>
+                  </div>;
+                })}
+              </div>
+              {/* Boss rows */}
+              {BOSS_ORDER.filter(bn => bn !== "Other").map(bn => (
+                <div key={bn} style={{ display: "flex", height: 48, borderBottom: "1px solid rgba(30,36,64,.4)" }}>
+                  {chars.map(cn => {
+                    const p = find(cn, bn);
+                    const skip = findSkip(cn, bn);
+                    const isSkipped = skip && !p;
+                    const lvlReq = BOSS_LEVEL_REQ[bn];
+                    const charLevel = charInfoCache[cn]?.level || 0;
+                    const underLevel = lvlReq && charLevel > 0 && charLevel < lvlReq;
+                    const isLocked = underLevel && !unlocked[`${cn}|${bn}`] && !p;
+                    return (
+                      <div key={cn} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 4px", background: isSkipped ? "rgba(100,116,139,.12)" : isLocked ? "rgba(0,0,0,.15)" : "transparent" }}>
                   {isLocked ? (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                       <span style={{ fontSize: 9, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Lv.{lvlReq}</span>
@@ -1576,10 +1582,12 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     </div>
                   </div>
                   )}
-                </td>
+                </div>
               );
-            })}</tr>)}</tbody>
-        </table>
+            })}</div>))}
+            </div>
+          </div>
+        </div>
       </div>
       {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
       {showManage && <ManageCharactersModal chars={allChars} onSave={(newChars) => onSaveProfile({ characters: newChars })} onClose={() => setShowManage(false)} />}
