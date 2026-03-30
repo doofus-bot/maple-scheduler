@@ -518,7 +518,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
       <div style={{ ...BACKDROP, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 11 }} onClick={onBack}>←</button>
-          <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
           {settingTime && isLead ? (
             <select value={boss?.difficulty || ""} onChange={e => {
               const newDiff = e.target.value;
@@ -531,13 +530,20 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               {BOSSES.find(b => b.name === boss?.bossName)?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           ) : (
-            <DiffBadge difficulty={boss?.difficulty} />
+            <DiffBadge difficulty={boss?.difficulty} small />
           )}
+          <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
           {party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
-            return <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginLeft: 8 }}>{run.localDay} · <span style={{ color: ACCENT, fontWeight: 700 }}>{run.resetLabel}</span></span>;
+            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
+            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+            return <>
+              <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{run.localDay} ·</span>
+              <span style={{ fontSize: 11, color: ACCENT, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{run.resetLabel}</span>
+              <button onClick={copyIt} title="Copy Discord timestamps" style={{ width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "✓" : "📋"}</button>
+            </>;
           })()}
-          {party.utcDay == null && <span style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginLeft: 8 }}>Unscheduled</span>}
+          {party.utcDay == null && <span style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Unscheduled</span>}
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {isLead && <>
