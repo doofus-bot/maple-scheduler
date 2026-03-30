@@ -444,12 +444,12 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const getSlot = (e) => {
     if (!gridRef.current) return null;
     const r = gridRef.current.getBoundingClientRect();
-    const x = e.clientX - r.left + gridRef.current.scrollLeft;
-    const y = e.clientY - r.top;
-    const row = Math.floor((y - 22) / 36);
-    const s = Math.floor((x - 50) / 14);
-    if (row < 0 || row > 6 || s < 0 || s > 47) return null;
-    return { day: DAY_ORDER[row], slot: s };
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top + gridRef.current.scrollTop;
+    const col = Math.floor((x - 40) / ((r.width - 40) / 7));
+    const s = Math.floor((y - 30) / 22);
+    if (col < 0 || col > 6 || s < 0 || s > 47) return null;
+    return { day: DAY_ORDER[col], slot: s };
   };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
@@ -487,103 +487,175 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const toggleEligible = (dropId, userId) => { const dr = party.drops?.find(d => d.id === dropId) || { eligible: [] }; const e = dr.eligible || []; updateDrop(dropId, "eligible", e.includes(userId) ? e.filter(x => x !== userId) : [...e, userId]); };
   const setPrioFn = (dropId, userId, pos) => { const dr = party.drops?.find(d => d.id === dropId) || { priority: [] }; let p = [...(dr.priority || [])].filter(x => x !== userId); if (pos > 0) p.splice(pos - 1, 0, userId); updateDrop(dropId, "priority", p); };
 
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [schedMembers, setSchedMembers] = useState(() => (party.members || []).reduce((o, m) => { o[m.userId] = true; return o; }, {}));
+  const toggleSchedMember = (uid) => setSchedMembers(prev => ({ ...prev, [uid]: !prev[uid] }));
+
+  const getCellInfoFiltered = (day, slot) => {
+    let ac = 0; const unavail = []; const conflicts = [];
+    const memberUsers = (party.members || []).filter(m => schedMembers[m.userId]).map(m => {
+      const u = allUsers.find(u => u.id === m.userId) || allUsers.find(u => u.username?.toLowerCase() === m.userId?.toLowerCase());
+      if (!u) return { ...m, resolvedId: m.userId, availability: {} };
+      const memberTZ = u.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const rawAvail = u?.availability || {};
+      return { ...m, resolvedId: u?.id || m.userId, availability: convertAvail(rawAvail, memberTZ) };
+    });
+    memberUsers.forEach(m => {
+      const hasAny = Object.keys(m.availability).length > 0;
+      if (!hasAny || m.availability[`${day}-${slot}`] === "available") ac++;
+      else unavail.push(m.charName);
+      const otherParties = Object.values(allParties).filter(op => op.id !== party.id && !op.skipped && op.utcDay != null && op.members?.some(om => om.userId === m.resolvedId || om.userId === m.userId));
+      for (const op of otherParties) {
+        if (op.utcDay === day) { const os = op.utcHour * 2 + (op.utcMin >= 30 ? 1 : 0); const od = Math.max(1, Math.ceil((op.duration || 30) / 30)); if (slot >= os && slot < os + od) conflicts.push({ name: m.charName, boss: op.bosses?.[0]?.bossName }); }
+      }
+    });
+    return { ac, tot: memberUsers.length, bc: conflicts.length, unavail, conflicts };
+  };
+
   return (
-    <div style={{ display: "flex", gap: 16, minHeight: "calc(100vh - 94px)", alignItems: "flex-start" }}>
-      {/* ── LEFT PANEL ── */}
-      <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Boss info + controls */}
-        <div style={{ ...BACKDROP, padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <button style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 11 }} onClick={onBack}>←</button>
-            <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
-            {settingTime && isLead ? (
-              <select value={boss?.difficulty || ""} onChange={e => {
-                const newDiff = e.target.value;
-                const newDrops = getDropsForBoss(boss.bossName, newDiff);
-                const newMaxP = getMaxParty(boss.bossName, newDiff);
-                onUpdate({ ...party, bosses: [{ ...boss, difficulty: newDiff }], maxMembers: newMaxP,
-                  drops: newDrops.map((d, i) => party.drops?.find(x => x.itemName === d.name) || { id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })
-                });
-              }} style={{ ...S.select, fontSize: 10, padding: "3px 8px", paddingRight: 20, borderRadius: 8, backgroundPosition: "right 4px center", fontWeight: 700, color: diffColor, background: `${diffColor}15`, borderColor: `${diffColor}44` }}>
-                {BOSSES.find(b => b.name === boss?.bossName)?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            ) : (
-              <DiffBadge difficulty={boss?.difficulty} />
-            )}
-          </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* TOP BAR */}
+      <div style={{ ...BACKDROP, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button style={{ ...S.btnGhost, padding: "4px 10px", fontSize: 11 }} onClick={onBack}>←</button>
+          <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Fredoka',sans-serif", color: "#e2e8f0" }}>{boss?.bossName}</span>
+          {settingTime && isLead ? (
+            <select value={boss?.difficulty || ""} onChange={e => {
+              const newDiff = e.target.value;
+              const newDrops = getDropsForBoss(boss.bossName, newDiff);
+              const newMaxP = getMaxParty(boss.bossName, newDiff);
+              onUpdate({ ...party, bosses: [{ ...boss, difficulty: newDiff }], maxMembers: newMaxP,
+                drops: newDrops.map((d, i) => party.drops?.find(x => x.itemName === d.name) || { id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })
+              });
+            }} style={{ ...S.select, fontSize: 10, padding: "3px 8px", paddingRight: 20, borderRadius: 8, backgroundPosition: "right 4px center", fontWeight: 700, color: diffColor, background: `${diffColor}15`, borderColor: `${diffColor}44` }}>
+              {BOSSES.find(b => b.name === boss?.bossName)?.diffs.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          ) : (
+            <DiffBadge difficulty={boss?.difficulty} />
+          )}
           {party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
-            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
-            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
-            return <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{run.localDay}</div>
-              <div style={{ background: "rgba(11,14,26,.5)", borderRadius: 8, padding: "8px 10px", border: "1px solid rgba(30,36,64,.4)", fontFamily: "'Comfortaa',sans-serif", position: "relative" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 2 }}>{run.resetLabel}</div>
-                <div style={{ fontSize: 10, color: "#64748b", wordBreak: "break-all", lineHeight: 1.6 }}>
-                  <div>{`<t:${run.startUnix}:R>`}</div>
-                  <div>{`<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`}</div>
-                </div>
-                <button onClick={copyIt} title="Copy for Discord" style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s" }}>{copied ? "✓" : "📋"}</button>
-              </div>
-            </div>;
+            return <span style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginLeft: 8 }}>{run.localDay} · <span style={{ color: ACCENT, fontWeight: 700 }}>{run.resetLabel}</span></span>;
           })()}
-          {party.utcDay == null && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Unscheduled</div>}
-          {isLead && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {party.utcDay == null && <span style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", marginLeft: 8 }}>Unscheduled</span>}
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          {isLead && <>
             <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
-              if (settingTime && timeAnchor) {
-                // Save pending anchor as 30min run
-                onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
-              }
+              if (settingTime && timeAnchor) onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
               setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
+              if (!showSchedule) setShowSchedule(true);
             }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
-            {/* Duration +/- */}
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
-              <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }}
-                style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
+              <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
               <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
-              <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }}
-                style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) >= 120 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) >= 120 ? 0.3 : 1 }}>+</button>
+              <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) >= 120 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) >= 120 ? 0.3 : 1 }}>+</button>
             </div>
             {party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
               <button onClick={() => onDelete(party.id)} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.25)", color: "#f87171", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Confirm</button>
-              <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 8px" }}>No</button>
+              <button onClick={() => setConfirmDelete(false)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>Cancel</button>
             </>}
-          </div>}
-          {!isLead && isMember && <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave Party</button>
-          </div>}
-          {!isLead && !isMember && <div style={{ fontSize: 10, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>View only</div>}
+          </>}
+          {!isLead && <button onClick={() => setShowSchedule(!showSchedule)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${showSchedule ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: showSchedule ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: showSchedule ? ACCENT : "#94a3b8" }}>{showSchedule ? "✓ Schedules" : "View Schedules"}</button>}
+          {isLead && <button onClick={() => setShowSchedule(!showSchedule)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px" }}>{showSchedule ? "Hide Schedule" : "View Schedules"}</button>}
+          {!isLead && isMember && <button onClick={leaveParty} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,.2)", cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: "rgba(239,68,68,.06)", color: "#f87171" }}>Leave</button>}
         </div>
+      </div>
 
-        {/* Combined Party — members + loot */}
-        <div style={{ ...BACKDROP, padding: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
-            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎"}</button>}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        {/* SCHEDULE PANEL (slides in from left) */}
+        {showSchedule && <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8, animation: "fadeIn .2s ease" }}>
+          <div style={{ ...BACKDROP, padding: "8px 12px" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Show Schedules</div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {(party.members || []).map(m => {
+                const on = schedMembers[m.userId];
+                return <button key={m.userId} onClick={() => toggleSchedMember(m.userId)}
+                  style={{ fontSize: 10, padding: "3px 8px", borderRadius: 5, border: `1px solid ${on ? "rgba(34,197,94,.3)" : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: on ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.02)", color: on ? "#10b981" : "#475569" }}>
+                  {on ? "✓" : ""} {m.charName}
+                </button>;
+              })}
+            </div>
+          </div>
+          <div style={{ ...BACKDROP, padding: 10 }}>
+            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` — ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
+            <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
+              onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
+              <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
+                <div style={{ width: 36, flexShrink: 0 }} />
+                {DAY_ORDER.map(di => (
+                  <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.6)" }}>{DAYS_SHORT[di]}</div>
+                ))}
+              </div>
+              <div style={{ display: "flex", height: 48 * 20 }}>
+                <div style={{ width: 36, flexShrink: 0, position: "relative" }}>
+                  {Array.from({ length: 48 }, (_, si) => {
+                    if (si % 2 !== 0) return null;
+                    const h = Math.floor(si / 2);
+                    return <div key={si} style={{ position: "absolute", top: si * 20, right: 3, fontSize: 7, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                      {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+                    </div>;
+                  })}
+                </div>
+                {DAY_ORDER.map(di => (
+                  <div key={di} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.06)" }}>
+                    {Array.from({ length: 48 }, (_, si) => {
+                      const info = getCellInfoFiltered(di, si);
+                      const isSch = partySlots.has(`${di}-${si}`);
+                      const isPr = timePrev.has(`${di}-${si}`);
+                      const isHov = settingTime && hoverTime && hoverTime.day === di && hoverTime.slot === si;
+                      let bg = "rgba(20,24,41,.8)";
+                      if (isSch) bg = "rgba(37,99,235,.5)";
+                      else if (isPr) bg = "rgba(37,99,235,.35)";
+                      else if (isHov) bg = "rgba(37,99,235,.2)";
+                      else if (info.bc > 0) bg = "rgba(251,146,36,.35)";
+                      else if (info.ac === info.tot && info.tot > 0) bg = "rgba(34,197,94,.35)";
+                      else if (info.ac > 0) bg = "rgba(251,191,36,.18)";
+                      else bg = "rgba(239,68,68,.22)";
+                      const isHour = si % 2 === 0 && si > 0;
+                      return <div key={si} style={{ position: "absolute", top: si * 20, left: 0, right: 0, height: 20, background: bg, borderTop: isHour ? "1px dashed rgba(255,255,255,.12)" : "none" }} />;
+                    })}
+                  </div>
+                ))}
+                <div style={{ position: "absolute", left: 36, right: 0, top: RESET_SLOT * 20, height: 0, borderTop: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
+                  <span style={{ position: "absolute", right: 4, top: -11, fontSize: 7, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>}
+
+        {/* MAIN CONTENT — Party Members & Drops */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+          {drops.length > 0 && <div style={{ ...BACKDROP, padding: "8px 12px" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {drops.map((drop, di) => {
+                const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null };
+                const did = pd.id || `d${di}`;
+                return <div key={di} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,.02)", border: "1px solid rgba(30,36,64,.3)" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
+                  {isLead && <div style={{ display: "flex", gap: 3 }}>
+                    {["blink", "priority"].map(mt => (
+                      <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
+                        style={{ ...S.btnGhost, fontSize: 9, padding: "2px 8px", ...(pd.method === mt ? S.btnActive : {}) }}>
+                        {mt === "blink" ? "Blink" : "Prio"}
+                      </button>
+                    ))}
+                  </div>}
+                  {!isLead && pd.method && <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{pd.method === "blink" ? "Blink" : "Priority"}</span>}
+                </div>;
+              })}
+            </div>
+          </div>}
+
+          <div style={{ ...BACKDROP, padding: "8px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", textTransform: "uppercase", letterSpacing: ".05em" }}>Party ({party.members?.length}/{maxP})</span>
+            {isLead && <button onClick={() => setEditMembers(!editMembers)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${editMembers ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 600, fontFamily: "'Comfortaa',sans-serif", background: editMembers ? ACCENT_LIGHT : "rgba(255,255,255,.03)", color: editMembers ? ACCENT : "#64748b" }}>{editMembers ? "✓ Done" : "✎ Edit Members"}</button>}
           </div>
 
-          {/* Drop method toggles — one row per drop */}
-          {drops.length > 0 && drops.map((drop, di) => {
-            const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
-            const did = pd.id || `d${di}`;
-            return <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "3px 6px", borderRadius: 6, background: "rgba(255,255,255,.02)" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: ACCENT, fontFamily: "'Fredoka',sans-serif" }}>{drop.name}</span>
-              {isLead && <div style={{ display: "flex", gap: 3 }}>
-                {["blink", "priority"].map(mt => (
-                  <button key={mt} onClick={() => updateDrop(did, "method", pd.method === mt ? null : mt)}
-                    style={{ ...S.btnGhost, fontSize: 8, padding: "2px 6px", ...(pd.method === mt ? S.btnActive : {}) }}>
-                    {mt === "blink" ? "Blink" : "Prio"}
-                  </button>
-                ))}
-              </div>}
-              {!isLead && pd.method && <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{pd.method === "blink" ? "Blink" : "Priority"}</span>}
-            </div>;
-          })}
-
-          {/* Character cards — 2 per row, equal height */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
             {party.members?.map((m, i) => {
               const isMe = m.userId === currentUser?.id;
               const myChars = currentUser?.characters || [];
@@ -598,14 +670,12 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                 const oldName = m.charName;
                 if (newName === oldName) return;
                 const bossKey = boss?.bossName + "|" + boss?.difficulty;
-                // Check if newName is already in another party for the same boss+diff
                 const otherParty = Object.values(allParties).find(op =>
                   op.id !== party.id && !op.skipped &&
                   op.bosses?.some(b => b.bossName + "|" + b.difficulty === bossKey) &&
                   op.members?.some(om => om.charName?.toLowerCase() === newName.toLowerCase())
                 );
                 if (otherParty && onBatchUpdate) {
-                  // Swap: put oldName into the other party, newName into this party
                   const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
                     om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
                   )};
@@ -616,30 +686,30 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                 }
               };
               return (
-                <div key={i} style={{ padding: "10px 8px 8px", borderRadius: 10, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
-                  {/* Edit controls */}
+                <div key={i} style={{ padding: "14px 12px 10px", borderRadius: 12, background: "rgba(11,14,26,.5)", border: "1px solid rgba(30,36,64,.4)", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
                   {editMembers && isLead && i !== 0 && (
-                    <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
-                      <button onClick={() => passLead(i)} title="Make lead" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(37,99,235,.15)", color: ACCENT, fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
-                      <button onClick={() => removeMember(i)} title="Remove" style={{ width: 16, height: 16, borderRadius: 3, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                    <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 3 }}>
+                      <button onClick={() => passLead(i)} title="Make lead" style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(37,99,235,.15)", color: ACCENT, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>👑</button>
+                      <button onClick={() => removeMember(i)} title="Remove" style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                     </div>
                   )}
-                  {/* Avatar */}
-                  <CharAvatar name={m.charName} size={44} />
-                  {/* IGN */}
-                  <div style={{ width: "100%", textAlign: "center", marginTop: 4 }}>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 4, minHeight: 16 }}>
+                    {i === 0 && <span style={{ ...S.leadBadge, fontSize: 8, padding: "1px 6px" }}>LEAD</span>}
+                    {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 8 }}>TEMP</span>}
+                    {isMe && <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 3, background: "rgba(37,99,235,.1)", color: ACCENT }}>YOU</span>}
+                  </div>
+                  <CharAvatar name={m.charName} size={64} />
+                  <div style={{ width: "100%", textAlign: "center", marginTop: 6 }}>
                     {showDropdown ? (
-                      <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 10, padding: "2px 4px", paddingRight: 16, width: "100%", backgroundPosition: "right 2px center", borderRadius: 5, textAlign: "center" }}>
+                      <select value={m.charName} onChange={e => switchChar(e.target.value)} style={{ ...S.select, fontSize: 12, padding: "3px 6px", paddingRight: 18, width: "100%", backgroundPosition: "right 4px center", borderRadius: 6, textAlign: "center", fontWeight: 700 }}>
                         {charOptions.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     ) : (
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.charName}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.charName}</div>
                     )}
                   </div>
-                  {/* Job + Level */}
                   <CharJobLevel name={m.charName} />
-                  {/* Loot — fills middle */}
-                  <div style={{ width: "100%", flex: 1, marginTop: 4 }}>
+                  <div style={{ width: "100%", marginTop: 8 }}>
                     {drops.map((drop, di) => {
                       const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
                       const did = pd.id || `d${di}`;
@@ -648,119 +718,57 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                       const hasPrio = pp != null && pp >= 0;
                       if (!pd.method) return null;
                       return (
-                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 4px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
-                          <span style={{ fontSize: 8, color: "#475569", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
-                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "1px 6px", borderRadius: 3, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 9, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
+                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
+                          <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
                           {pd.method === "priority" && (isLead ? (
-                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 10, padding: "1px 3px", paddingRight: 3, width: 32, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 3, appearance: "none", WebkitAppearance: "none" }}>
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 36, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
                               <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
                             </select>
                           ) : (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "1px 5px", borderRadius: 3, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "2px 6px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
                           ))}
                         </div>
                       );
                     })}
-                  </div>
-                  {/* Badges — pinned to bottom */}
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "center", marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(30,36,64,.2)", width: "100%", minHeight: 16 }}>
-                    {i === 0 && <span style={{ ...S.leadBadge, fontSize: 7, padding: "1px 5px" }}>LEAD</span>}
-                    {m.isTemp && <span style={{ ...S.tempBadge, fontSize: 7 }}>TEMP</span>}
-                    {isMe && <span style={{ fontSize: 7, padding: "1px 5px", borderRadius: 3, background: "rgba(37,99,235,.1)", color: ACCENT }}>YOU</span>}
-                    {!isMe && i !== 0 && !m.isTemp && <span style={{ fontSize: 7, color: "#374151" }}>&nbsp;</span>}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Leave party — non-lead members */}
-          {isMember && !isLead && <button onClick={leaveParty} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 6, border: "1px solid rgba(239,68,68,.2)", background: "rgba(239,68,68,.06)", color: "#f87171", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>Leave Party</button>}
-
-          {/* Add members — lead only, edit mode */}
           {editMembers && isLead && party.members.length < maxP && (
-            <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid rgba(30,36,64,.3)" }}>
+            <div style={{ ...BACKDROP, padding: 12 }}>
               <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginBottom: 6 }}>Add by Discord username</div>
               <div style={{ display: "flex", gap: 4 }}>
                 <input ref={addRef} style={{ ...S.input, fontSize: 11, padding: "5px 8px", flex: 1 }} placeholder="Discord username..." value={addDiscord} onChange={e => setAddDiscord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && addDiscord.trim()) addMemberByDiscord(); }} />
-                <button onClick={() => addDiscord.trim() && addMemberByDiscord()} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
+                <button onClick={() => addDiscord.trim() && addMemberByDiscord()} style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: ACCENT_LIGHT, color: ACCENT, fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>＋</button>
               </div>
-              <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "4px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
+              <button onClick={() => setIgnPopup({ type: "temp" })} style={{ marginTop: 6, width: "100%", padding: "5px 0", borderRadius: 5, border: "1px dashed rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)", color: "#fbbf24", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif" }}>+ Add Temp</button>
             </div>
           )}
         </div>
-        {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
       </div>
 
-      {/* ── RIGHT PANEL — Schedule Grid (horizontal) ── */}
-      <div style={{ flex: 1, ...BACKDROP, padding: 12, minWidth: 0 }}>
-        {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 8 }}>Click a time slot{timeAnchor ? ` — start: ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}. Click end time (same day)` : ""}</div>}
-        {settingTime && hoverTime && <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverTime.day]} {slotToTime(hoverTime.slot)}</div>}
-        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto" }}
-          onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
-          {/* Hour labels */}
-          <div style={{ display: "flex", marginLeft: 50, height: 20 }}>
-            {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} style={{ width: 28, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
-                {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
-              </div>
-            ))}
+      {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
+      {hoverCell && hoverCellPos && !settingTime && (() => {
+        const info = getCellInfoFiltered(hoverCell.day, hoverCell.slot);
+        if (info.ac === info.tot && info.bc === 0) return null;
+        return <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...hoverCellPos }}>
+          <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 8, padding: "8px 10px", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 140, maxWidth: 220 }}>
+            <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverCell.day]} {slotToTime(hoverCell.slot)}</div>
+            {info.unavail.length > 0 && <div style={{ marginBottom: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#f87171", fontFamily: "'Comfortaa',sans-serif" }}>Unavailable: </span>
+              <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.unavail.join(", ")}</span>
+            </div>}
+            {info.conflicts.length > 0 && <div>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#fb923c", fontFamily: "'Comfortaa',sans-serif" }}>Conflict: </span>
+              <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.conflicts.map(c => `${c.name} (${c.boss})`).join(", ")}</span>
+            </div>}
+            {info.ac > 0 && info.ac < info.tot && <div style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{info.ac}/{info.tot} available</div>}
           </div>
-          {/* Day rows */}
-          {DAY_ORDER.map(di => (
-            <div key={di} style={{ display: "flex", height: 36, borderBottom: "1px solid rgba(30,36,64,.2)" }}>
-              <div style={{ width: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", position: "sticky", left: 0, zIndex: 2, background: "rgba(11,14,26,.95)" }}>{DAYS_SHORT[di]}</div>
-              {Array.from({ length: 48 }, (_, si) => {
-                const info = getCellInfo(di, si);
-                const isSch = partySlots.has(`${di}-${si}`);
-                const isPr = timePrev.has(`${di}-${si}`);
-                const isHov = settingTime && hoverTime && hoverTime.day === di && hoverTime.slot === si;
-                let bg = "rgba(20,24,41,.8)";
-                if (isSch) bg = "rgba(37,99,235,.5)";
-                else if (isPr) bg = "rgba(37,99,235,.35)";
-                else if (isHov) bg = "rgba(37,99,235,.2)";
-                else if (info.bc > 0) bg = "rgba(251,146,36,.35)";
-                else if (info.ac === info.tot && info.tot > 0) bg = "rgba(34,197,94,.35)";
-                else if (info.ac > 0) bg = "rgba(251,191,36,.18)";
-                else bg = "rgba(239,68,68,.22)";
-                const is4hr = si % 8 === 0 && si > 0;
-                return <div key={si} style={{ width: 14, height: 36, flexShrink: 0, background: bg, borderRight: is4hr ? "1px solid rgba(255,255,255,.18)" : si % 2 === 1 ? "1px solid rgba(30,36,64,.2)" : "1px solid rgba(30,36,64,.08)" }} />;
-              })}
-            </div>
-          ))}
-          {/* Vertical reset line */}
-          <div style={{ position: "absolute", top: 20, bottom: 0, left: 50 + RESET_SLOT * 14, width: 0, borderLeft: "2px dashed rgba(239,68,68,.5)", pointerEvents: "none", zIndex: 5 }}>
-            <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
-          </div>
-        </div>
-        {/* Legend */}
-        <div style={{ display: "flex", gap: 10, marginTop: 8, fontSize: 9, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", flexWrap: "wrap" }}>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(37,99,235,.5)", marginRight: 3, verticalAlign: "middle" }} />Scheduled</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(34,197,94,.35)", marginRight: 3, verticalAlign: "middle" }} />All Free</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,.18)", marginRight: 3, verticalAlign: "middle" }} />Partial</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(239,68,68,.22)", marginRight: 3, verticalAlign: "middle" }} />Unavailable</span>
-          <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,146,36,.35)", marginRight: 3, verticalAlign: "middle" }} />Conflict</span>
-        </div>
-        {/* Cell hover tooltip */}
-        {hoverCell && hoverCellPos && !settingTime && (() => {
-          const info = getCellInfo(hoverCell.day, hoverCell.slot);
-          if (info.ac === info.tot && info.bc === 0) return null;
-          return <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...hoverCellPos }}>
-            <div style={{ background: "rgba(11,14,26,.97)", border: "1px solid rgba(30,36,64,.8)", borderRadius: 8, padding: "8px 10px", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 140, maxWidth: 220 }}>
-              <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 4 }}>{DAYS_SHORT[hoverCell.day]} {slotToTime(hoverCell.slot)}</div>
-              {info.unavail.length > 0 && <div style={{ marginBottom: 3 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#f87171", fontFamily: "'Comfortaa',sans-serif" }}>Unavailable: </span>
-                <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.unavail.join(", ")}</span>
-              </div>}
-              {info.conflicts.length > 0 && <div>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#fb923c", fontFamily: "'Comfortaa',sans-serif" }}>Conflict: </span>
-                <span style={{ fontSize: 9, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{info.conflicts.map(c => `${c.name} (${c.boss})`).join(", ")}</span>
-              </div>}
-              {info.ac > 0 && info.ac < info.tot && <div style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{info.ac}/{info.tot} available</div>}
-            </div>
-          </div>;
-        })()}
-      </div>
+        </div>;
+      })()}
     </div>
   );
 }
@@ -804,12 +812,12 @@ function ProfileModal({ user, onClose, onSave }) {
   const getSlot = (e) => {
     if (!gridRef.current) return null;
     const r = gridRef.current.getBoundingClientRect();
-    const x = e.clientX - r.left + gridRef.current.scrollLeft;
-    const y = e.clientY - r.top;
-    const row = Math.floor((y - 20) / 36);
-    const s = Math.floor((x - 50) / 14);
-    if (row < 0 || row > 6 || s < 0 || s > 47) return null;
-    return { day: DAY_ORDER[row], slot: s };
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top + gridRef.current.scrollTop;
+    const col = Math.floor((x - 40) / ((r.width - 40) / 7));
+    const s = Math.floor((y - 28) / 18);
+    if (col < 0 || col > 6 || s < 0 || s > 47) return null;
+    return { day: DAY_ORDER[col], slot: s };
   };
   const getPreview = () => { if (!anchor || !hover || anchor.day !== hover.day) return new Set(); const s = new Set(); for (let i = Math.min(anchor.slot, hover.slot); i <= Math.max(anchor.slot, hover.slot); i++) s.add(`${anchor.day}-${i}`); return s; };
   const onClick = (e) => { e.preventDefault(); const pos = getSlot(e); if (!pos) return; if (!anchor) { const k = `${pos.day}-${pos.slot}`; setAnchor(pos); setMode(avail[k] === "available" ? "deselect" : "select"); } else { if (pos.day === anchor.day) { const mn = Math.min(anchor.slot, pos.slot), mx = Math.max(anchor.slot, pos.slot); setAvail(p => { const c = { ...p }; for (let s = mn; s <= mx; s++) { const k = `${pos.day}-${s}`; if (mode === "select") c[k] = "available"; else delete c[k]; } return c; }); } setAnchor(null); setHover(null); setMode(null); } };
@@ -862,35 +870,45 @@ function ProfileModal({ user, onClose, onSave }) {
           </div>}
         </div>
         <label style={S.label}>Availability</label>
-        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "auto" }}
+        <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: anchor ? "pointer" : "crosshair", background: "rgba(11,14,26,.4)", borderRadius: 8, border: "1px solid #1e2440", overflow: "auto", maxHeight: 500 }}
           onClick={onClick} onMouseMove={e => setHover(getSlot(e))} onMouseLeave={() => setHover(null)}>
-          {/* Hour labels */}
-          <div style={{ display: "flex", marginLeft: 50, height: 20 }}>
-            {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} style={{ width: 28, flexShrink: 0, fontSize: 8, color: "#64748b", textAlign: "center", fontFamily: "'Comfortaa',sans-serif", lineHeight: "20px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>
-                {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
-              </div>
+          {/* Day headers */}
+          <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 4, background: "rgba(11,14,26,.98)" }}>
+            <div style={{ width: 40, flexShrink: 0 }} />
+            {DAY_ORDER.map(di => (
+              <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[di]}</div>
             ))}
           </div>
-          {/* Day rows */}
-          {DAY_ORDER.map(di => (
-            <div key={di} style={{ display: "flex", height: 36, borderBottom: "1px solid rgba(30,36,64,.15)" }}>
-              <div style={{ width: 50, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", position: "sticky", left: 0, zIndex: 2, background: "rgba(11,14,26,.95)" }}>{DAYS_SHORT[di]}</div>
+          <div style={{ display: "flex", height: 48 * 18 }}>
+            {/* Time labels */}
+            <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
               {Array.from({ length: 48 }, (_, si) => {
-                const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si;
-                const is4hr = si % 8 === 0 && si > 0;
-                return <div key={si} style={{
-                  width: 14, height: 36, flexShrink: 0,
-                  background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent",
-                  borderRight: is4hr ? "1px solid rgba(255,255,255,.12)" : si % 2 === 1 ? "1px solid rgba(255,255,255,.03)" : "none",
-                  transition: "background .08s",
-                }} />;
+                if (si % 2 !== 0) return null;
+                const h = Math.floor(si / 2);
+                return <div key={si} style={{ position: "absolute", top: si * 18, right: 4, fontSize: 8, color: "#475569", lineHeight: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                  {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+                </div>;
               })}
             </div>
-          ))}
-          {/* Vertical reset line */}
-          <div style={{ position: "absolute", top: 20, bottom: 0, left: 50 + RESET_SLOT * 14, width: 0, borderLeft: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none" }}>
-            <span style={{ position: "absolute", top: -14, left: 4, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>0:00 UTC</span>
+            {/* Day columns */}
+            {DAY_ORDER.map(di => (
+              <div key={di} style={{ flex: 1, position: "relative", borderLeft: "1px solid rgba(255,255,255,.06)" }}>
+                {Array.from({ length: 48 }, (_, si) => {
+                  const k = `${di}-${si}`; const v = avail[k]; const ip = preview.has(k); const ia = anchor && anchor.day === di && anchor.slot === si;
+                  const isHour = si % 2 === 0 && si > 0;
+                  return <div key={si} style={{
+                    position: "absolute", top: si * 18, left: 0, right: 0, height: 18,
+                    background: v === "available" ? (ip && mode === "deselect" ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.4)") : ip && mode === "select" ? "rgba(34,197,94,.2)" : ia ? (mode === "deselect" ? "rgba(239,68,68,.3)" : "rgba(34,197,94,.3)") : "transparent",
+                    borderTop: isHour ? "1px dashed rgba(255,255,255,.08)" : "none",
+                    transition: "background .08s",
+                  }} />;
+                })}
+              </div>
+            ))}
+            {/* Reset line */}
+            <div style={{ position: "absolute", left: 40, right: 0, top: RESET_SLOT * 18, height: 0, borderTop: "2px dashed rgba(239,68,68,.6)", pointerEvents: "none", zIndex: 3 }}>
+              <span style={{ position: "absolute", right: 4, top: -12, fontSize: 8, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 3, fontFamily: "'Comfortaa',sans-serif", whiteSpace: "nowrap" }}>0:00 UTC</span>
+            </div>
           </div>
         </div>
 
