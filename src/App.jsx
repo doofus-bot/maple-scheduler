@@ -360,6 +360,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const [copied, setCopied] = useState(false);
   const [addDiscord, setAddDiscord] = useState("");
   const [ignPopup, setIgnPopup] = useState(null);
+  const [charConflict, setCharConflict] = useState(null); // { newName, oldName, otherParty, memberIdx }
   const addRef = useRef(null);
   const gridRef = useRef(null);
   const maxP = party.maxMembers || 6;
@@ -446,8 +447,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
     const r = gridRef.current.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top + gridRef.current.scrollTop;
-    const col = Math.floor((x - 40) / ((r.width - 40) / 7));
-    const s = Math.floor((y - 30) / 22);
+    const col = Math.floor((x - 36) / ((r.width - 36) / 7));
+    const s = Math.floor((y - 28) / 20);
     if (col < 0 || col > 6 || s < 0 || s > 47) return null;
     return { day: DAY_ORDER[col], slot: s };
   };
@@ -623,12 +624,8 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                   op.bosses?.some(b => b.bossName + "|" + b.difficulty === bossKey) &&
                   op.members?.some(om => om.charName?.toLowerCase() === newName.toLowerCase())
                 );
-                if (otherParty && onBatchUpdate) {
-                  const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
-                    om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
-                  )};
-                  const updatedThis = { ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) };
-                  onBatchUpdate([updatedThis, updatedOther]);
+                if (otherParty) {
+                  setCharConflict({ newName, oldName, otherParty, memberIdx: i });
                 } else {
                   onUpdate({ ...party, members: party.members.map((mm, j) => j === i ? { ...mm, charName: newName } : mm) });
                 }
@@ -659,7 +656,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                     )}
                   </div>
                   <CharJobLevel name={m.charName} />
-                  {!expandSchedule && <div style={{ width: "100%", marginTop: 6 }}>
+                  <div style={{ width: "100%", marginTop: expandSchedule ? 4 : 6 }}>
                     {drops.map((drop, di) => {
                       const pd = party.drops?.find(d => d.itemName === drop.name) || { method: null, eligible: [], priority: [] };
                       const did = pd.id || `d${di}`;
@@ -668,20 +665,20 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                       const hasPrio = pp != null && pp >= 0;
                       if (!pd.method) return null;
                       return (
-                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
-                          <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
-                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
+                        <div key={di} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: expandSchedule ? "2px 4px" : "4px 6px", borderTop: "1px solid rgba(30,36,64,.3)", marginTop: 2 }}>
+                          <span style={{ fontSize: expandSchedule ? 8 : 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{DROP_ABBR[drop.name] || drop.name}</span>
+                          {pd.method === "blink" && <button onClick={() => isLead && toggleEligible(did, m.userId)} style={{ padding: expandSchedule ? "1px 5px" : "2px 8px", borderRadius: 4, border: "none", cursor: isLead ? "pointer" : "default", background: isE ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.12)", color: isE ? "#10b981" : "#f87171", fontSize: expandSchedule ? 8 : 10, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>{isE ? "✓" : "✕"}</button>}
                           {pd.method === "priority" && (isLead ? (
-                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: 11, padding: "2px 4px", paddingRight: 4, width: 36, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
+                            <select value={hasPrio ? pp + 1 : ""} onChange={e => setPrioFn(did, m.userId, parseInt(e.target.value) || 0)} style={{ ...S.select, fontSize: expandSchedule ? 9 : 11, padding: "2px 4px", paddingRight: 4, width: expandSchedule ? 28 : 36, backgroundImage: "none", textAlign: "center", fontWeight: 700, color: hasPrio ? "#fff" : "#475569", background: hasPrio ? ACCENT : "rgba(11,14,26,.6)", borderColor: hasPrio ? ACCENT : "#1e2440", borderRadius: 4, appearance: "none", WebkitAppearance: "none" }}>
                               <option value="">—</option>{party.members.map((_, pi) => <option key={pi} value={pi + 1}>{pi + 1}</option>)}
                             </select>
                           ) : (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "2px 6px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
+                            <span style={{ fontSize: expandSchedule ? 8 : 10, fontWeight: 700, color: hasPrio ? "#fff" : "#374151", padding: "2px 6px", borderRadius: 4, background: hasPrio ? ACCENT : "transparent" }}>{hasPrio ? `#${pp + 1}` : "—"}</span>
                           ))}
                         </div>
                       );
                     })}
-                  </div>}
+                  </div>
                 </div>
               );
             })}
@@ -765,6 +762,41 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
       </div>
 
       {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
+      {/* Character conflict dialog */}
+      {charConflict && <div style={S.overlay} onClick={() => setCharConflict(null)}><div style={{ ...S.modal, width: "min(420px,90vw)" }} onClick={e => e.stopPropagation()}>
+        <div style={S.modalHead}><span style={S.modalTitle}>Character Conflict</span><button style={S.closeBtn} onClick={() => setCharConflict(null)}>✕</button></div>
+        <div style={S.modalBody}>
+          <div style={{ fontSize: 12, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", marginBottom: 16, lineHeight: 1.6 }}>
+            <strong>{charConflict.newName}</strong> is already in another <strong>{boss?.bossName}</strong> party.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button onClick={() => {
+              const { newName, oldName, otherParty, memberIdx } = charConflict;
+              const updatedOther = { ...otherParty, members: otherParty.members.map(om =>
+                om.charName?.toLowerCase() === newName.toLowerCase() ? { ...om, charName: oldName } : om
+              )};
+              const updatedThis = { ...party, members: party.members.map((mm, j) => j === memberIdx ? { ...mm, charName: newName } : mm) };
+              onBatchUpdate([updatedThis, updatedOther]);
+              setCharConflict(null);
+            }} style={{ ...S.btnPrimary, width: "100%", padding: "10px 16px", fontSize: 12 }}>
+              Swap — move {charConflict.oldName} to the other party
+            </button>
+            <button onClick={() => {
+              const { newName, otherParty, memberIdx } = charConflict;
+              const updatedThis = { ...party, members: party.members.map((mm, j) => j === memberIdx ? { ...mm, charName: newName } : mm) };
+              // Remove newName from other party
+              const updatedOther = { ...otherParty, members: otherParty.members.filter(om => om.charName?.toLowerCase() !== newName.toLowerCase()) };
+              onBatchUpdate([updatedThis, updatedOther]);
+              setCharConflict(null);
+            }} style={{ ...S.btnGhost, width: "100%", padding: "10px 16px", fontSize: 12, color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}>
+              Remove {charConflict.newName} from the other party
+            </button>
+            <button onClick={() => setCharConflict(null)} style={{ ...S.btnGhost, width: "100%", padding: "10px 16px", fontSize: 12 }}>
+              Cancel — don't make any changes
+            </button>
+          </div>
+        </div>
+      </div></div>}
       {hoverCell && hoverCellPos && !settingTime && (() => {
         const info = getCellInfoFiltered(hoverCell.day, hoverCell.slot);
         if (info.ac === info.tot && info.bc === 0) return null;
@@ -1477,8 +1509,11 @@ function ManageCharactersModal({ chars, onSave, onClose }) {
 
 /* ═══ CHARACTERS VIEW ═══ */
 function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSolo, onSkipBoss, onSaveProfile }) {
-  const pl = Object.values(parties || {}).filter(p => p.members?.some(m => m.userId === user.id) || (p.skipped && p.leaderId === user.id));
   const allChars = (user.characters || []).slice(0, 12);
+  const pl = Object.values(parties || {}).filter(p => {
+    if (p.skipped && (p.leaderId === user.id || p.leaderId === user.username)) return true;
+    return p.members?.some(m => m.userId === user.id || m.userId === user.username || allChars.some(c => m.charName?.toLowerCase() === c.toLowerCase()));
+  });
   const [page, setPage] = useState(0);
   const [charSlideDir, setCharSlideDir] = useState(null);
   const [charSlideKey, setCharSlideKey] = useState(0);
@@ -1495,7 +1530,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   // Find party for THIS user's character — matches by userId AND charName
   const uid = user.id;
   const uname = user.username;
-  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => (m.userId === uid || m.userId === uname) && m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
+  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => (m.userId === uid || m.userId === uname || m.charName?.toLowerCase() === cn.toLowerCase())) && p.bosses?.some(b => b.bossName === bn));
   const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && (p.leaderId === uid || p.leaderId === uname) && p.bosses?.some(b => b.bossName === bn));
 
   const eBtn = { width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "transform .1s" };
