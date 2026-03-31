@@ -1530,7 +1530,7 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
   // Find party for THIS user's character — matches by userId AND charName
   const uid = user.id;
   const uname = user.username;
-  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => (m.userId === uid || m.userId === uname || m.charName?.toLowerCase() === cn.toLowerCase())) && p.bosses?.some(b => b.bossName === bn));
+  const find = (cn, bn) => pl.find(p => !p.skipped && p.members?.some(m => m.charName?.toLowerCase() === cn.toLowerCase()) && p.bosses?.some(b => b.bossName === bn));
   const findSkip = (cn, bn) => pl.find(p => p.skipped && p._skipChar?.toLowerCase() === cn.toLowerCase() && (p.leaderId === uid || p.leaderId === uname) && p.bosses?.some(b => b.bossName === bn));
 
   const eBtn = { width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "transform .1s" };
