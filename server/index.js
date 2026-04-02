@@ -385,9 +385,9 @@ function buildDailySummary(userId, username, userTZ) {
     bossDate.setUTCHours(Math.floor(bossUTCMin / 60), bossUTCMin % 60, 0, 0);
     const startUnix = Math.floor(bossDate.getTime() / 1000);
 
-    // Reset relation
-    const minsFromReset = party.utcHour * 60 + party.utcMin;
-    const minsToReset = 24 * 60 - minsFromReset;
+    // Reset relation (relative to 0:00 UTC)
+    const minsFromReset = bossUTCMin;
+    const minsToReset = 24 * 60 - bossUTCMin;
     const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
     const absMins = useNeg ? minsToReset : minsFromReset;
     const rH = Math.floor(absMins / 60), rM = absMins % 60;
@@ -601,9 +601,9 @@ function runNotificationCheck() {
             const startUnix = Math.floor(bossDate.getTime() / 1000);
             const endUnix = startUnix + duration * 60;
 
-            // Reset relation (use original stored time for display)
-            const minsFromReset = party.utcHour * 60 + party.utcMin;
-            const minsToReset = 24 * 60 - minsFromReset;
+            // Reset relation (relative to 0:00 UTC)
+            const minsFromReset = bossUTCMin;
+            const minsToReset = 24 * 60 - bossUTCMin;
             const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
             const absMins = useNeg ? minsToReset : minsFromReset;
             const rH = Math.floor(absMins / 60), rM = absMins % 60;
