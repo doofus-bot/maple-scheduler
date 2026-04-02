@@ -453,7 +453,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
     return { day: DAY_ORDER[col], slot: s };
   };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
+  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(pos.slot / 2), utcMin: (pos.slot % 2) * 30, duration: party.duration || 30 }); setSettingTime(false); setTimeHover(null); };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (!settingTime && pos) setHoverCell(pos); };
   const [hoverCell, setHoverCell] = useState(null);
   const [hoverCellPos, setHoverCellPos] = useState(null);
@@ -538,8 +538,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {isLead && <>
             <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
-              if (settingTime && timeAnchor) onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
-              setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
+              setSettingTime(!settingTime); setTimeHover(null);
               if (!expandSchedule) setExpandSchedule(true);
             }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
@@ -713,7 +712,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             </div>
           </div>
           <div style={{ ...BACKDROP, padding: 10 }}>
-            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` \u2014 ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
+            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot to schedule</div>}
             <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
               onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
               <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
@@ -722,7 +721,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                   <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.6)" }}>{DAYS_SHORT[di]}</div>
                 ))}
               </div>
-              <div style={{ display: "flex", height: 48 * 20 }}>
+              <div style={{ display: "flex", height: 48 * 20, position: "relative" }}>
                 <div style={{ width: 36, flexShrink: 0, position: "relative" }}>
                   {Array.from({ length: 48 }, (_, si) => {
                     if (si % 2 !== 0) return null;
@@ -927,7 +926,7 @@ function ProfileModal({ user, onClose, onSave }) {
               <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[di]}</div>
             ))}
           </div>
-          <div style={{ display: "flex", height: 48 * 18 }}>
+          <div style={{ display: "flex", height: 48 * 18, position: "relative" }}>
             {/* Time labels */}
             <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
               {Array.from({ length: 48 }, (_, si) => {
@@ -1456,6 +1455,40 @@ function CharRow({ name, index, total, onMove, onRemove }) {
   );
 }
 
+function AdminCharManager({ user, onUpdate }) {
+  const [chars, setChars] = useState(user.characters || []);
+  const [newChar, setNewChar] = useState("");
+  useEffect(() => { setChars(user.characters || []); }, [user.characters]);
+  const add = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { const nc = [...chars, n]; setChars(nc); onUpdate(nc); setNewChar(""); } };
+  const rm = (i) => { const nc = chars.filter((_, j) => j !== i); setChars(nc); onUpdate(nc); };
+  const move = (i, dir) => { const nc = [...chars]; [nc[i], nc[i + dir]] = [nc[i + dir], nc[i]]; setChars(nc); onUpdate(nc); };
+  return <div>
+    <label style={S.label}>Characters ({chars.length})</label>
+    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+      <input style={S.input} placeholder="Add character IGN..." value={newChar} onChange={e => setNewChar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+      <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
+    </div>
+    {chars.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
+      {chars.map((c, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
+          <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
+          <CharAvatar name={c} size={24} />
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
+          <CharJobLevel name={c} />
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            <button onClick={() => i > 0 && move(i, -1)} disabled={i === 0}
+              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
+            <button onClick={() => i < chars.length - 1 && move(i, 1)} disabled={i === chars.length - 1}
+              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
+          </div>
+          <button onClick={() => rm(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
+        </div>
+      ))}
+    </div>}
+    {chars.length === 0 && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", padding: 12, textAlign: "center" }}>No characters registered</div>}
+  </div>;
+}
+
 function ManageCharactersModal({ chars, onSave, onClose }) {
   const [list, setList] = useState([...chars]);
   const [newChar, setNewChar] = useState("");
@@ -1925,6 +1958,104 @@ function ShareView({ token }) {
 
 
 
+/* ═══ ADMIN MODAL ═══ */
+function AdminModal({ onClose }) {
+  const [username, setUsername] = useState("");
+  const [targetUser, setTargetUser] = useState(null);
+  const [chars, setChars] = useState([]);
+  const [newChar, setNewChar] = useState("");
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const lookup = async () => {
+    if (!username.trim()) return;
+    setError(null); setTargetUser(null);
+    try {
+      const r = await fetch(`/api/admin/user/${encodeURIComponent(username.trim())}`, { credentials: "include" });
+      if (!r.ok) { setError("User not found"); return; }
+      const d = await r.json();
+      setTargetUser(d);
+      setChars(d.characters || []);
+    } catch (e) { setError(e.message); }
+  };
+
+  const save = async () => {
+    if (!targetUser) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/admin/user/${encodeURIComponent(targetUser.username)}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characters: chars }),
+      });
+      setSaving(false);
+    } catch { setSaving(false); }
+  };
+
+  useEffect(() => { if (targetUser) save(); }, [chars]);
+
+  const add = () => { const n = newChar.trim(); if (n && !chars.some(c => c.toLowerCase() === n.toLowerCase())) { setChars(p => [...p, n]); setNewChar(""); } };
+  const remove = (i) => setChars(p => p.filter((_, j) => j !== i));
+  const move = (from, to) => { const a = [...chars]; const [item] = a.splice(from, 1); a.splice(to, 0, item); setChars(a); };
+
+  return (
+    <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(560px,95vw)" }} onClick={e => e.stopPropagation()}>
+      <div style={S.modalHead}>
+        <span style={S.modalTitle}>Admin — Manage User</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {saving && <span style={{ fontSize: 10, color: "#64748b" }}>Saving...</span>}
+          <button style={S.closeBtn} onClick={onClose}>✕</button>
+        </div>
+      </div>
+      <div style={S.modalBody}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input style={S.input} placeholder="Discord username..." value={username}
+            onChange={e => setUsername(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") lookup(); }} />
+          <button style={{ ...S.btnPrimary, whiteSpace: "nowrap" }} onClick={lookup}>Look Up</button>
+        </div>
+        {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12, fontFamily: "'Comfortaa',sans-serif" }}>{error}</div>}
+
+        {targetUser && <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "8px 12px", borderRadius: 8, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)" }}>
+            {targetUser.avatar && <img src={targetUser.avatar} style={{ width: 32, height: 32, borderRadius: "50%" }} alt="" />}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{targetUser.username}</div>
+              <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{targetUser.id} · {chars.length} characters</div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input style={S.input} placeholder="Add character IGN..." value={newChar}
+              onChange={e => setNewChar(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+            <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
+          </div>
+
+          {chars.length > 0 && <div style={{ border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
+            {chars.map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
+                <span style={{ fontSize: 11, color: "#64748b", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
+                <CharAvatar name={c} size={24} />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
+                <CharJobLevel name={c} />
+                <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                  <button onClick={() => i > 0 && move(i, i - 1)} disabled={i === 0}
+                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
+                  <button onClick={() => i < chars.length - 1 && move(i, i + 1)} disabled={i === chars.length - 1}
+                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
+                </div>
+                <button onClick={() => remove(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
+              </div>
+            ))}
+          </div>}
+          {chars.length === 0 && <div style={{ fontSize: 12, color: "#475569", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", padding: 20 }}>No characters registered</div>}
+        </>}
+      </div>
+    </div></div>
+  );
+}
+
 /* ═══ MAIN APP ═══ */
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -1933,6 +2064,10 @@ export default function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminUser, setAdminUser] = useState(null);
+  const [adminSearch, setAdminSearch] = useState("");
   const [selectedParty, setSelectedParty] = useState(null);
   const [trash, setTrash] = useState({});
   const [view, setView] = useState("schedule");
@@ -2089,7 +2224,9 @@ export default function App() {
           <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
           <button onClick={() => navTo("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => navTo("characters")} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
+          {user.isAdmin && <button onClick={() => setShowAdmin(true)} style={{ ...S.btnGhost, fontSize: 11, color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>⚙ Admin</button>}
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
+          {user.isAdmin && <button onClick={() => setShowAdmin(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}>⚙ Admin</button>}
         </div>
       </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1, overflow: "hidden" }}>
@@ -2105,6 +2242,37 @@ export default function App() {
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
       {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} onSave={handleSaveProfile} />}
+      {showAdmin && <div style={S.overlay} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}><div style={{ ...S.modal, width: "min(540px,92vw)" }} onClick={e => e.stopPropagation()}>
+        <div style={S.modalHead}><span style={S.modalTitle}>Admin — Manage User Characters</span><button style={S.closeBtn} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}>✕</button></div>
+        <div style={S.modalBody}>
+          {!adminUser ? <>
+            <label style={S.label}>Discord Username</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input style={S.input} placeholder="Enter Discord username..." value={adminSearch} onChange={e => setAdminSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && adminSearch.trim()) {
+                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
+              }}} />
+              <button style={{ ...S.btnPrimary, whiteSpace: "nowrap" }} onClick={() => {
+                if (!adminSearch.trim()) return;
+                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
+              }}>Search</button>
+            </div>
+          </> : <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              {adminUser.avatar && <img src={adminUser.avatar} style={{ width: 32, height: 32, borderRadius: "50%" }} alt="" />}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{adminUser.username}</div>
+                <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>ID: {adminUser.id}</div>
+              </div>
+              <button onClick={() => setAdminUser(null)} style={{ ...S.btnGhost, fontSize: 10, padding: "3px 10px", marginLeft: "auto" }}>← Back</button>
+            </div>
+            <AdminCharManager user={adminUser} onUpdate={(newChars) => {
+              API.patch(`/api/admin/user/${encodeURIComponent(adminUser.username)}`, { characters: newChars })
+                .then(() => setAdminUser(prev => ({ ...prev, characters: newChars })))
+                .catch(e => alert("Save failed: " + e.message));
+            }} />
+          </>}
+        </div>
+      </div></div>}
     </div>
   );
 }
