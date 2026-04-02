@@ -190,13 +190,18 @@ function requireAuth(req, res, next) {
 }
 
 /* ════════════════════════════════════════
+   ADMIN CONFIG
+   ════════════════════════════════════════ */
+const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",").map(s => s.trim()).filter(Boolean);
+
+/* ════════════════════════════════════════
    API: USERS
    ════════════════════════════════════════ */
 app.get("/api/me", requireAuth, (req, res) => {
   const u = req.user;
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
 });
 
 app.patch("/api/me", requireAuth, (req, res) => {
@@ -211,7 +216,7 @@ app.patch("/api/me", requireAuth, (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
 });
 
 app.get("/api/users", requireAuth, (req, res) => {
@@ -300,6 +305,29 @@ app.get("/api/nexon/:name", async (req, res) => {
     console.error("Nexon API error:", err);
     res.json({ imgUrl: null, jobName: null, level: null, characterName: name });
   }
+});
+
+/* ════════════════════════════════════════
+   ADMIN ENDPOINTS
+   ════════════════════════════════════════ */
+const requireAdmin = (req, res, next) => {
+  if (!req.user || !ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Not authorized" });
+  next();
+};
+
+app.get("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
+  const u = db.prepare("SELECT id, username, characters, avatar FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  res.json({ id: u.id, username: u.username, characters: JSON.parse(u.characters || "[]"), avatar: u.avatar });
+});
+
+app.patch("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
+  const { characters } = req.body;
+  if (!characters) return res.status(400).json({ error: "characters required" });
+  const u = db.prepare("SELECT id FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  db.prepare("UPDATE users SET characters = ? WHERE id = ?").run(JSON.stringify(characters), u.id);
+  res.json({ success: true, characters });
 });
 
 /* ════════════════════════════════════════
