@@ -2065,7 +2065,6 @@ export default function App() {
   const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
   const [adminSearch, setAdminSearch] = useState("");
   const [selectedParty, setSelectedParty] = useState(null);
