@@ -190,18 +190,13 @@ function requireAuth(req, res, next) {
 }
 
 /* ════════════════════════════════════════
-   ADMIN CONFIG
-   ════════════════════════════════════════ */
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",").map(s => s.trim()).filter(Boolean);
-
-/* ════════════════════════════════════════
    API: USERS
    ════════════════════════════════════════ */
 app.get("/api/me", requireAuth, (req, res) => {
   const u = req.user;
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
 app.patch("/api/me", requireAuth, (req, res) => {
@@ -216,7 +211,7 @@ app.patch("/api/me", requireAuth, (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
 });
 
 app.get("/api/users", requireAuth, (req, res) => {
@@ -308,29 +303,6 @@ app.get("/api/nexon/:name", async (req, res) => {
 });
 
 /* ════════════════════════════════════════
-   ADMIN ENDPOINTS
-   ════════════════════════════════════════ */
-const requireAdmin = (req, res, next) => {
-  if (!req.user || !ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Not authorized" });
-  next();
-};
-
-app.get("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
-  const u = db.prepare("SELECT id, username, characters, avatar FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
-  if (!u) return res.status(404).json({ error: "User not found" });
-  res.json({ id: u.id, username: u.username, characters: JSON.parse(u.characters || "[]"), avatar: u.avatar });
-});
-
-app.patch("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
-  const { characters } = req.body;
-  if (!characters) return res.status(400).json({ error: "characters required" });
-  const u = db.prepare("SELECT id FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
-  if (!u) return res.status(404).json({ error: "User not found" });
-  db.prepare("UPDATE users SET characters = ? WHERE id = ?").run(JSON.stringify(characters), u.id);
-  res.json({ success: true, characters });
-});
-
-/* ════════════════════════════════════════
    TEST NOTIFICATION ENDPOINT
    ════════════════════════════════════════ */
 app.post("/api/me/test-notification", requireAuth, async (req, res) => {
@@ -363,6 +335,8 @@ app.post("/api/me/test-notification", requireAuth, async (req, res) => {
    DAILY SUMMARY BUILDER
    ════════════════════════════════════════ */
 const DIFF_ABBR_SERVER = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
+const MONTHLY_BOSSES_SERVER = new Set(["Black Mage|Extreme"]);
+const isMonthlyServer = (bossName, diff) => MONTHLY_BOSSES_SERVER.has(`${bossName}|${diff}`);
 
 function buildDailySummary(userId, username, userTZ) {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -382,9 +356,44 @@ function buildDailySummary(userId, username, userTZ) {
   const upcoming = [];
 
   for (const [pid, party] of Object.entries(parties)) {
-    if (party.skipped || party.utcDay == null) continue;
+    if (party.skipped) continue;
     const isMember = party.members?.some(m => m.userId === userId || m.userId === username);
     if (!isMember) continue;
+
+    // Handle monthly bosses
+    if (party.isMonthly) {
+      if (!party.scheduledDate) continue;
+      const leaderId = party.leaderId;
+      const leaderUser = users.find(u => u.id === leaderId);
+      const leaderTZ = leaderUser?.timezone || "America/New_York";
+      const [sY, sMo, sD] = party.scheduledDate.split("-").map(Number);
+      const localH = party.utcHour || 0, localM = party.utcMin || 0;
+      const refDate = new Date();
+      const localStr = refDate.toLocaleString("en-US", { timeZone: leaderTZ });
+      const localDate = new Date(localStr);
+      const tzOffsetMs = refDate.getTime() - localDate.getTime();
+      const localBossDate = new Date(sY, sMo - 1, sD, localH, localM, 0);
+      const bossUTCDate = new Date(localBossDate.getTime() + tzOffsetMs);
+      const startUnix = Math.floor(bossUTCDate.getTime() / 1000);
+      const minsUntil = (startUnix - Math.floor(now.getTime() / 1000)) / 60;
+      if (minsUntil < 0 || minsUntil > 24 * 60) continue;
+
+      let bossUTCMin = bossUTCDate.getUTCHours() * 60 + bossUTCDate.getUTCMinutes();
+      const minsFromReset = bossUTCMin;
+      const minsToReset = 24 * 60 - bossUTCMin;
+      const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
+      const absMins = useNeg ? minsToReset : minsFromReset;
+      const rH = Math.floor(absMins / 60), rM = absMins % 60;
+      const resetStr = "Reset " + (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
+
+      const bossName = party.bosses?.[0]?.bossName || "Boss";
+      const diff = party.bosses?.[0]?.difficulty || "";
+      const charName = party.members?.find(m => m.userId === userId || m.userId === username)?.charName || "—";
+      upcoming.push({ startUnix, minsUntil, bossName, diff, charName, resetStr, pid });
+      continue;
+    }
+
+    if (party.utcDay == null) continue;
 
     // Convert stored local time to UTC using leader's TZ
     const leaderId = party.leaderId;
@@ -568,8 +577,117 @@ function runNotificationCheck() {
 
     const siteUrl = process.env.SITE_URL || "https://maplescheduler.com";
 
+    // ── Monthly boss notifications ──
     for (const [pid, party] of Object.entries(parties)) {
-      if (party.skipped || party.utcDay == null) continue;
+      if (party.skipped || !party.isMonthly || !party.scheduledDate) continue;
+      const bossName = party.bosses?.[0]?.bossName || "Boss";
+      const diff = party.bosses?.[0]?.difficulty || "";
+      const duration = party.duration || 30;
+      const isSolo = (party.members?.length || 0) <= 1;
+
+      // Convert scheduledDate + local time to UTC
+      const leaderId = party.leaderId;
+      const leaderUser = users.find(u => u.id === leaderId);
+      const leaderTZ = leaderUser?.timezone || "America/New_York";
+      const [sY, sMo, sD] = party.scheduledDate.split("-").map(Number);
+      const localH = party.utcHour || 0, localM = party.utcMin || 0;
+
+      // Build date in leader's local timezone, convert to UTC
+      const refDate = new Date();
+      const localStr = refDate.toLocaleString("en-US", { timeZone: leaderTZ });
+      const localDate = new Date(localStr);
+      const tzOffsetMs = refDate.getTime() - localDate.getTime();
+      const tzOffsetMins = Math.round(tzOffsetMs / 60000);
+
+      // Convert stored local time to actual UTC minute-of-day
+      let bossUTCMin = (localH * 60 + localM) + tzOffsetMins;
+
+      // Figure out the actual UTC date of the boss
+      const localBossDate = new Date(sY, sMo - 1, sD, localH, localM, 0);
+      const bossUTCDate = new Date(localBossDate.getTime() + tzOffsetMs);
+      const bossUTCDay = bossUTCDate.getUTCDay(); // 0=Sun
+      const bossMondayDay = (bossUTCDay + 6) % 7; // 0=Mon
+
+      // Normalize
+      while (bossUTCMin >= 24 * 60) { bossUTCMin -= 24 * 60; }
+      while (bossUTCMin < 0) { bossUTCMin += 24 * 60; }
+
+      // Check if today is the boss day (by full date, not just day-of-week)
+      const todayUTC = `${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-${String(now.getUTCDate()).padStart(2,"0")}`;
+      const bossUTCDateStr = `${bossUTCDate.getUTCFullYear()}-${String(bossUTCDate.getUTCMonth()+1).padStart(2,"0")}-${String(bossUTCDate.getUTCDate()).padStart(2,"0")}`;
+      if (todayUTC !== bossUTCDateStr) continue;
+
+      for (const member of (party.members || [])) {
+        const userId = member.userId;
+        const userPref = userMap[userId] || usernameMap[userId?.toLowerCase()];
+        if (!userPref?.notifs?.enabled) continue;
+        const realDiscordId = userPref.id;
+        if (isSolo && !userPref.notifs.solos) continue;
+        const timings = isSolo ? [0] : (userPref.notifs.timings || []);
+
+        for (const minsBefore of timings) {
+          let notifyMin = bossUTCMin - minsBefore;
+          if (notifyMin < 0) notifyMin += 24 * 60;
+          if (notifyMin >= 24 * 60) notifyMin -= 24 * 60;
+
+          if (Math.abs(nowMin - notifyMin) <= 1) {
+            const sentKey = `monthly_${pid}_${realDiscordId}_${minsBefore}_${party.scheduledDate}`;
+            const already = db.prepare("SELECT id FROM notifications_sent WHERE id = ?").get(sentKey);
+            if (already) continue;
+
+            const startUnix = Math.floor(bossUTCDate.getTime() / 1000);
+            const endUnix = startUnix + duration * 60;
+            const minsFromReset = bossUTCMin;
+            const minsToReset = 24 * 60 - bossUTCMin;
+            const useNeg = minsToReset <= 8 * 60 && minsFromReset > 0;
+            const absMins = useNeg ? minsToReset : minsFromReset;
+            const rH = Math.floor(absMins / 60), rM = absMins % 60;
+            const resetStr = "Reset " + (useNeg ? "-" : "+") + rH + (rM > 0 ? ":" + String(rM).padStart(2, "0") : "");
+
+            const partySize = party.members?.length || 1;
+            const memberNames = party.members?.map(m => m.charName).filter(Boolean).join(", ") || "—";
+            const BOSS_GIFS = {
+              "Lotus": "https://media.discordapp.net/attachments/1447721739030364251/1447722529899941930/Lotus.gif",
+              "Black Mage": "https://media.discordapp.net/attachments/1447721739030364251/1447722830358909168/BlackMage2.gif",
+              "Seren": "https://media.discordapp.net/attachments/1447721739030364251/1447722852806688869/Seren2.gif",
+              "Kalos": "https://media.discordapp.net/attachments/1447721739030364251/1447722948445339799/Kalos2.gif",
+              "Kaling": "https://media.discordapp.net/attachments/1447721739030364251/1447722960696770571/Kaling2.gif",
+              "Limbo": "https://media.discordapp.net/attachments/1447721739030364251/1447722991575371910/Limbo2.gif",
+              "Baldrix": "https://media.discordapp.net/attachments/1447721739030364251/1447723005768896703/Baldrix2.gif",
+              "Adversary": "https://media.discordapp.net/attachments/1447721739030364251/1447723017449898108/FirstAdversary2.gif",
+            };
+            const EMBED_COLORS = { "Easy": 0x989898, "Normal": 0x49B8C6, "Hard": 0xCE506D, "Chaos": 0xDCBA87, "Extreme": 0xED7421 };
+
+            const partyLink = `${siteUrl}/party/${pid}`;
+            const gif = BOSS_GIFS[bossName];
+            const embedColor = EMBED_COLORS[diff] || 0x2563eb;
+            let title = minsBefore === 0 ? `${diff} ${bossName} — Starting NOW!` : `${diff} ${bossName} — ${minsBefore}min`;
+            const timeField = `<t:${startUnix}:R> — <t:${startUnix}:F>`;
+            const partyField = partySize > 1 ? `**${member.charName || "—"}** | ${partySize}p — ${memberNames}` : `**${member.charName || "—"}** | Solo`;
+
+            const embed = {
+              title,
+              url: partyLink,
+              color: embedColor,
+              fields: [
+                { name: "Time", value: timeField, inline: false },
+                { name: "Party", value: partyField, inline: false },
+              ],
+              footer: { text: `${resetStr} · Monthly Boss` },
+            };
+            if (gif) embed.thumbnail = { url: gif };
+
+            sendDiscordDM(realDiscordId, { embeds: [embed] });
+            db.prepare("INSERT OR IGNORE INTO notifications_sent (id) VALUES (?)").run(sentKey);
+            console.log(`📨 [Monthly] Notified ${realDiscordId} for ${diff} ${bossName} (${minsBefore}min before)`);
+          }
+        }
+      }
+    }
+
+    // ── Weekly boss notifications ──
+    for (const [pid, party] of Object.entries(parties)) {
+      if (party.skipped || party.utcDay == null || party.isMonthly) continue;
 
       // Convert stored local time to actual UTC
       // Find leader's timezone (or fall back to first member's, or America/New_York)
