@@ -22,6 +22,8 @@ const BOSS_DROPS = {
 };
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
 const BOSS_LEVEL_REQ = { Seren: 260, Kalos: 265, Adversary: 270, Kaling: 275, Limbo: 285, Baldrix: 290 };
+const MONTHLY_BOSSES = new Set(["Black Mage|Extreme"]);
+const isMonthlyBoss = (bossName, diff) => MONTHLY_BOSSES.has(`${bossName}|${diff}`);
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
 const DIFF_COLORS = { Easy: "#989898", Normal: "#49B8C6", Hard: "#CE506D", Chaos: "#DCBA87", Extreme: "#ED7421" };
 const DIFF_BADGE_STYLE = {
@@ -94,6 +96,31 @@ function getNextRun(localDay, localHour, localMin, duration) {
   // Local day name for display
   const localDayName = candidate.toLocaleDateString("en-US", { weekday: "long" });
   return { startUnix, endUnix, resetLabel, localDay: localDayName };
+}
+
+/* Next run for monthly bosses — scheduledDate is "YYYY-MM-DD", hour/min in creator's local TZ */
+function getNextRunMonthly(scheduledDate, localHour, localMin, duration) {
+  if (!scheduledDate) return null;
+  const [y, mo, d] = scheduledDate.split("-").map(Number);
+  const h = localHour || 0, m = localMin || 0;
+  const candidate = new Date(y, mo - 1, d, h, m, 0);
+  const startUnix = Math.floor(candidate.getTime() / 1000);
+  const endUnix = startUnix + (duration || 30) * 60;
+  const utcH = candidate.getUTCHours(), utcM = candidate.getUTCMinutes();
+  const hoursAfter = utcH + utcM / 60;
+  const hoursBefore = 24 - hoursAfter;
+  let resetLabel;
+  if (hoursBefore <= 8 && hoursAfter > 0) {
+    const v = Math.round(hoursBefore * 4) / 4;
+    resetLabel = `Reset -${v % 1 === 0 ? v.toFixed(0) : v}`;
+  } else {
+    const v = Math.round(hoursAfter * 4) / 4;
+    resetLabel = `Reset +${v % 1 === 0 ? v.toFixed(0) : v}`;
+  }
+  const localDayName = candidate.toLocaleDateString("en-US", { weekday: "long" });
+  const localDateStr = candidate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const isPast = candidate.getTime() < Date.now();
+  return { startUnix, endUnix, resetLabel, localDay: localDayName, localDateStr, isPast };
 }
 
 /* ═══ API ═══ */
@@ -289,10 +316,12 @@ function CreatePartyModal({ onClose, onSave, currentUser, defaultBoss, defaultDi
 
   const save = () => {
     if (!boss || (!diff && boss !== "Other")) return;
+    const monthly = isMonthlyBoss(boss, diff);
     onSave({
       id: genId(), leaderId: currentUser.id, members, maxMembers: maxP,
       bosses: [{ id: "b0", bossName: boss, difficulty: diff }],
       utcDay: null, utcHour: null, utcMin: null, duration: 30, notes: "",
+      ...(monthly ? { isMonthly: true, scheduledDate: null } : {}),
       drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })),
     });
   };
@@ -351,6 +380,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const drops = boss ? getDropsForBoss(boss.bossName, boss.difficulty) : [];
   const isLead = party.leaderId === currentUser?.id || party.leaderId === currentUser?.username;
   const isMember = party.members?.some(m => m.userId === currentUser?.id || m.userId === currentUser?.username);
+  const monthly = party.isMonthly || isMonthlyBoss(boss?.bossName, boss?.difficulty);
   const [settingTime, setSettingTime] = useState(false);
   const [timeAnchor, setTimeAnchor] = useState(null);
   const [timeHover, setTimeHover] = useState(null);
@@ -453,7 +483,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
     return { day: DAY_ORDER[col], slot: s };
   };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(pos.slot / 2), utcMin: (pos.slot % 2) * 30, duration: party.duration || 30 }); setSettingTime(false); setTimeHover(null); };
+  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (!settingTime && pos) setHoverCell(pos); };
   const [hoverCell, setHoverCell] = useState(null);
   const [hoverCellPos, setHoverCellPos] = useState(null);
@@ -537,16 +567,18 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {isLead && <>
-            <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
-              setSettingTime(!settingTime); setTimeHover(null);
+            {!monthly && <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
+              if (settingTime && timeAnchor) onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
+              setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
               if (!expandSchedule) setExpandSchedule(true);
-            }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
+            }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>}
+            {!monthly && <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
               <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
               <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
               <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) >= 120 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) >= 120 ? 0.3 : 1 }}>+</button>
-            </div>
-            {party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
+            </div>}
+            {monthly && party.scheduledDate && <button onClick={() => onUpdate({ ...party, scheduledDate: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
+            {!monthly && party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
               <button onClick={() => onDelete(party.id)} style={{ padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", background: "rgba(239,68,68,.25)", color: "#f87171", fontSize: 11, fontWeight: 700, fontFamily: "'Comfortaa',sans-serif" }}>Confirm</button>
@@ -560,8 +592,47 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         {/* LEFT — Timestamp + Drops + Members */}
         <div style={{ flex: expandSchedule ? 1 : 2, minWidth: 0, display: "flex", flexDirection: "column", gap: 10, transition: "flex .25s ease" }}>
-          {/* Timestamp box */}
-          {party.utcDay != null && (() => {
+          {/* Timestamp / Scheduling box */}
+          {monthly && (() => {
+            const run = party.scheduledDate ? getNextRunMonthly(party.scheduledDate, party.utcHour, party.utcMin, party.duration) : null;
+            const discordText = run ? `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>` : "";
+            const copyIt = () => { if (discordText) navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+            return <div style={{ ...BACKDROP, padding: "10px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif", letterSpacing: ".04em" }}>MONTHLY</span>
+              </div>
+              {isLead && (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: run ? 10 : 0 }}>
+                  <div><label style={{ ...S.label, marginBottom: 4 }}>Date</label>
+                    <input type="date" value={party.scheduledDate || ""} onChange={e => onUpdate({ ...party, scheduledDate: e.target.value || null })}
+                      style={{ ...S.input, width: 150, fontSize: 12, padding: "6px 10px" }} /></div>
+                  <div><label style={{ ...S.label, marginBottom: 4 }}>Time</label>
+                    <input type="time" value={party.utcHour != null ? `${String(party.utcHour).padStart(2,"0")}:${String(party.utcMin || 0).padStart(2,"0")}` : ""}
+                      onChange={e => { const [h, m] = (e.target.value || "0:0").split(":").map(Number); onUpdate({ ...party, utcHour: h, utcMin: m }); }}
+                      style={{ ...S.input, width: 110, fontSize: 12, padding: "6px 10px" }} /></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
+                    <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u2212"}</button>
+                    <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
+                    <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                  </div>
+                </div>
+              )}
+              {!isLead && !run && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", fontStyle: "italic" }}>Not yet scheduled by party lead</div>}
+              {run && <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: run.isPast ? "#f87171" : ACCENT, marginBottom: 2 }}>
+                    {run.localDateStr} ({run.localDay}) · {run.resetLabel}
+                    {run.isPast && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,.15)", color: "#f87171", marginLeft: 8 }}>Past</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                    <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
+                  </div>
+                </div>
+                <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "\u2713" : "\ud83d\udccb"}</button>
+              </div>}
+            </div>;
+          })()}
+          {!monthly && party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
             const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
             const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
@@ -712,7 +783,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
             </div>
           </div>
           <div style={{ ...BACKDROP, padding: 10 }}>
-            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot to schedule</div>}
+            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` \u2014 ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
             <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
               onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
               <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
@@ -721,7 +792,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                   <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.6)" }}>{DAYS_SHORT[di]}</div>
                 ))}
               </div>
-              <div style={{ display: "flex", height: 48 * 20, position: "relative" }}>
+              <div style={{ display: "flex", height: 48 * 20 }}>
                 <div style={{ width: 36, flexShrink: 0, position: "relative" }}>
                   {Array.from({ length: 48 }, (_, si) => {
                     if (si % 2 !== 0) return null;
@@ -926,7 +997,7 @@ function ProfileModal({ user, onClose, onSave }) {
               <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[di]}</div>
             ))}
           </div>
-          <div style={{ display: "flex", height: 48 * 18, position: "relative" }}>
+          <div style={{ display: "flex", height: 48 * 18 }}>
             {/* Time labels */}
             <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
               {Array.from({ length: 48 }, (_, si) => {
@@ -1071,6 +1142,8 @@ function ProfileModal({ user, onClose, onSave }) {
 /* ═══ SCHEDULE VIEW — drag & drop with magnetization, undo, duration ═══ */
 function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRecover, onPermDelete, onShare, shareCopied }) {
   const partyList = Object.values(parties || {}).filter(p => !p.skipped && p.members?.some(m => m.userId === user.id || m.userId === user.username));
+  const weeklyParties = partyList.filter(p => !p.isMonthly);
+  const monthlyParties = partyList.filter(p => p.isMonthly);
   const avail = user.availability || {};
   const [editing, setEditing] = useState(false);
   const [showSolos, setShowSolos] = useState(user.showSolos !== false);
@@ -1080,7 +1153,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const [undoStack, setUndoStack] = useState([]);
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
-  const displayList = showSolos ? partyList : partyList.filter(p => (p.members?.length || 0) > 1);
+  const displayList = showSolos ? weeklyParties : weeklyParties.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
   const SLOT_COUNT = 48;
@@ -1112,7 +1185,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
 
   const byDay = useMemo(() => {
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
-    partyList.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); });
+    weeklyParties.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); });
     displayList.forEach(p => { if (p.utcDay == null) m.unscheduled.push(p); });
     m.unscheduled.sort((a, b) => {
       const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
@@ -1121,7 +1194,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     });
     for (let i = 0; i < 7; i++) m[i].sort((a, b) => (a.utcHour * 60 + a.utcMin) - (b.utcHour * 60 + b.utcMin));
     return m;
-  }, [partyList, displayList]);
+  }, [weeklyParties, displayList]);
 
   const getDurSlots = (p) => Math.max(0.5, (p.duration || 30) / 30);
   // getStartSlot returns fractional slots: 15min = x.5 within a slot
@@ -1217,6 +1290,7 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const isAvail = (d, s) => avail[`${d}-${s}`] === "available";
 
   return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
       {/* LEFT COLUMN */}
       <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1422,6 +1496,67 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
       </div>
       {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
     </div>
+    {/* ═══ MONTHLY BOSSES SECTION ═══ */}
+    {monthlyParties.length > 0 && (
+      <div style={{ ...BACKDROP, padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>Monthly Bosses</span>
+          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif" }}>MONTHLY</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {monthlyParties
+            .sort((a, b) => {
+              const aRun = a.scheduledDate ? getNextRunMonthly(a.scheduledDate, a.utcHour, a.utcMin, a.duration) : null;
+              const bRun = b.scheduledDate ? getNextRunMonthly(b.scheduledDate, b.utcHour, b.utcMin, b.duration) : null;
+              if (!aRun && !bRun) return 0;
+              if (!aRun) return 1;
+              if (!bRun) return -1;
+              return aRun.startUnix - bRun.startUnix;
+            })
+            .map(p => {
+            const b = p.bosses?.[0];
+            const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+            const run = p.scheduledDate ? getNextRunMonthly(p.scheduledDate, p.utcHour, p.utcMin, p.duration) : null;
+            const solo = (p.members?.length || 0) <= 1;
+            const mc = p.members?.length || 1;
+            const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : `${mc}p`;
+            const myChar = p.members?.find(m => m.userId === user.id || m.userId === user.username)?.charName;
+            const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+            return (
+              <div key={p.id} onClick={() => onClickParty(p)}
+                onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); }}
+                onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
+                onMouseLeave={() => setHoverParty(null)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                  background: solo ? "rgba(160,70,70,.15)" : "rgba(20,24,41,.5)",
+                  border: `1px solid ${solo ? "rgba(196,92,92,.25)" : "rgba(30,36,64,.6)"}`,
+                  transition: "background .15s",
+                }}>
+                <DiffBadge difficulty={b?.difficulty} small />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", minWidth: 90 }}>{b?.bossName}</span>
+                {run ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: run.isPast ? "#f87171" : ACCENT }}>{run.localDateStr}</span>
+                    <span style={{ fontSize: 10, color: "#94a3b8" }}>{p.utcHour != null ? fmtTime(p.utcHour, p.utcMin || 0) : ""}</span>
+                    <span style={{ fontSize: 10, color: "#64748b" }}>{run.resetLabel}</span>
+                    {run.isPast && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,.15)", color: "#f87171" }}>Past</span>}
+                  </div>
+                ) : (
+                  <span style={{ flex: 1, fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", fontStyle: "italic" }}>Not scheduled</span>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {myChar && <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{myChar}</span>}
+                  <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{sizeLabel}</span>
+                </div>
+                <span style={{ fontSize: 12, color: "#475569" }}>›</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+    </div>
   );
 }
 
@@ -1453,40 +1588,6 @@ function CharRow({ name, index, total, onMove, onRemove }) {
       <button onClick={() => onRemove(index)} style={{ width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
     </div>
   );
-}
-
-function AdminCharManager({ user, onUpdate }) {
-  const [chars, setChars] = useState(user.characters || []);
-  const [newChar, setNewChar] = useState("");
-  useEffect(() => { setChars(user.characters || []); }, [user.characters]);
-  const add = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { const nc = [...chars, n]; setChars(nc); onUpdate(nc); setNewChar(""); } };
-  const rm = (i) => { const nc = chars.filter((_, j) => j !== i); setChars(nc); onUpdate(nc); };
-  const move = (i, dir) => { const nc = [...chars]; [nc[i], nc[i + dir]] = [nc[i + dir], nc[i]]; setChars(nc); onUpdate(nc); };
-  return <div>
-    <label style={S.label}>Characters ({chars.length})</label>
-    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <input style={S.input} placeholder="Add character IGN..." value={newChar} onChange={e => setNewChar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
-      <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
-    </div>
-    {chars.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
-      {chars.map((c, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
-          <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
-          <CharAvatar name={c} size={24} />
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
-          <CharJobLevel name={c} />
-          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-            <button onClick={() => i > 0 && move(i, -1)} disabled={i === 0}
-              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
-            <button onClick={() => i < chars.length - 1 && move(i, 1)} disabled={i === chars.length - 1}
-              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
-          </div>
-          <button onClick={() => rm(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
-        </div>
-      ))}
-    </div>}
-    {chars.length === 0 && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", padding: 12, textAlign: "center" }}>No characters registered</div>}
-  </div>;
 }
 
 function ManageCharactersModal({ chars, onSave, onClose }) {
@@ -1958,104 +2059,6 @@ function ShareView({ token }) {
 
 
 
-/* ═══ ADMIN MODAL ═══ */
-function AdminModal({ onClose }) {
-  const [username, setUsername] = useState("");
-  const [targetUser, setTargetUser] = useState(null);
-  const [chars, setChars] = useState([]);
-  const [newChar, setNewChar] = useState("");
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  const lookup = async () => {
-    if (!username.trim()) return;
-    setError(null); setTargetUser(null);
-    try {
-      const r = await fetch(`/api/admin/user/${encodeURIComponent(username.trim())}`, { credentials: "include" });
-      if (!r.ok) { setError("User not found"); return; }
-      const d = await r.json();
-      setTargetUser(d);
-      setChars(d.characters || []);
-    } catch (e) { setError(e.message); }
-  };
-
-  const save = async () => {
-    if (!targetUser) return;
-    setSaving(true);
-    try {
-      await fetch(`/api/admin/user/${encodeURIComponent(targetUser.username)}`, {
-        method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characters: chars }),
-      });
-      setSaving(false);
-    } catch { setSaving(false); }
-  };
-
-  useEffect(() => { if (targetUser) save(); }, [chars]);
-
-  const add = () => { const n = newChar.trim(); if (n && !chars.some(c => c.toLowerCase() === n.toLowerCase())) { setChars(p => [...p, n]); setNewChar(""); } };
-  const remove = (i) => setChars(p => p.filter((_, j) => j !== i));
-  const move = (from, to) => { const a = [...chars]; const [item] = a.splice(from, 1); a.splice(to, 0, item); setChars(a); };
-
-  return (
-    <div style={S.overlay} onClick={onClose}><div style={{ ...S.modal, width: "min(560px,95vw)" }} onClick={e => e.stopPropagation()}>
-      <div style={S.modalHead}>
-        <span style={S.modalTitle}>Admin — Manage User</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {saving && <span style={{ fontSize: 10, color: "#64748b" }}>Saving...</span>}
-          <button style={S.closeBtn} onClick={onClose}>✕</button>
-        </div>
-      </div>
-      <div style={S.modalBody}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <input style={S.input} placeholder="Discord username..." value={username}
-            onChange={e => setUsername(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") lookup(); }} />
-          <button style={{ ...S.btnPrimary, whiteSpace: "nowrap" }} onClick={lookup}>Look Up</button>
-        </div>
-        {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 12, fontFamily: "'Comfortaa',sans-serif" }}>{error}</div>}
-
-        {targetUser && <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "8px 12px", borderRadius: 8, background: "rgba(11,14,26,.4)", border: "1px solid rgba(30,36,64,.4)" }}>
-            {targetUser.avatar && <img src={targetUser.avatar} style={{ width: 32, height: 32, borderRadius: "50%" }} alt="" />}
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{targetUser.username}</div>
-              <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{targetUser.id} · {chars.length} characters</div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input style={S.input} placeholder="Add character IGN..." value={newChar}
-              onChange={e => setNewChar(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
-            <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
-          </div>
-
-          {chars.length > 0 && <div style={{ border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
-            {chars.map((c, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
-                <span style={{ fontSize: 11, color: "#64748b", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
-                <CharAvatar name={c} size={24} />
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
-                <CharJobLevel name={c} />
-                <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                  <button onClick={() => i > 0 && move(i, i - 1)} disabled={i === 0}
-                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
-                  <button onClick={() => i < chars.length - 1 && move(i, i + 1)} disabled={i === chars.length - 1}
-                    style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
-                </div>
-                <button onClick={() => remove(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
-              </div>
-            ))}
-          </div>}
-          {chars.length === 0 && <div style={{ fontSize: 12, color: "#475569", fontFamily: "'Comfortaa',sans-serif", textAlign: "center", padding: 20 }}>No characters registered</div>}
-        </>}
-      </div>
-    </div></div>
-  );
-}
-
 /* ═══ MAIN APP ═══ */
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -2064,9 +2067,6 @@ export default function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [adminUser, setAdminUser] = useState(null);
-  const [adminSearch, setAdminSearch] = useState("");
   const [selectedParty, setSelectedParty] = useState(null);
   const [trash, setTrash] = useState({});
   const [view, setView] = useState("schedule");
@@ -2153,12 +2153,14 @@ export default function App() {
     // Default to first difficulty
     const diff = bossObj.diffs[0];
     const drops = getDropsForBoss(bossName, diff);
+    const monthly = isMonthlyBoss(bossName, diff);
     const party = {
       id: genId(), leaderId: user.id,
       members: [{ userId: user.id, charName, isTemp: false, isLead: true }],
       maxMembers: getMaxParty(bossName, diff),
       bosses: [{ id: "b0", bossName, difficulty: diff }],
       utcDay: null, utcHour: null, utcMin: null, duration: 30, notes: "",
+      ...(monthly ? { isMonthly: true, scheduledDate: null } : {}),
       drops: drops.map((d, i) => ({ id: `d${i}`, bossId: "b0", itemName: d.name, method: null, eligible: [], priority: [] })),
     };
     await save({ ...parties, [party.id]: party });
@@ -2223,9 +2225,7 @@ export default function App() {
           <button style={S.btnPrimary} onClick={() => { setCreateDefaults({}); setShowCreate(true); }}>＋ Create Party</button>
           <button onClick={() => navTo("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => navTo("characters")} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
-          {user.isAdmin && <button onClick={() => setShowAdmin(true)} style={{ ...S.btnGhost, fontSize: 11, color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>⚙ Admin</button>}
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
-          {user.isAdmin && <button onClick={() => setShowAdmin(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}>⚙ Admin</button>}
         </div>
       </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1, overflow: "hidden" }}>
@@ -2241,37 +2241,6 @@ export default function App() {
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
       {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} onSave={handleSaveProfile} />}
-      {showAdmin && <div style={S.overlay} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}><div style={{ ...S.modal, width: "min(540px,92vw)" }} onClick={e => e.stopPropagation()}>
-        <div style={S.modalHead}><span style={S.modalTitle}>Admin — Manage User Characters</span><button style={S.closeBtn} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}>✕</button></div>
-        <div style={S.modalBody}>
-          {!adminUser ? <>
-            <label style={S.label}>Discord Username</label>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <input style={S.input} placeholder="Enter Discord username..." value={adminSearch} onChange={e => setAdminSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && adminSearch.trim()) {
-                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
-              }}} />
-              <button style={{ ...S.btnPrimary, whiteSpace: "nowrap" }} onClick={() => {
-                if (!adminSearch.trim()) return;
-                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
-              }}>Search</button>
-            </div>
-          </> : <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              {adminUser.avatar && <img src={adminUser.avatar} style={{ width: 32, height: 32, borderRadius: "50%" }} alt="" />}
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{adminUser.username}</div>
-                <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>ID: {adminUser.id}</div>
-              </div>
-              <button onClick={() => setAdminUser(null)} style={{ ...S.btnGhost, fontSize: 10, padding: "3px 10px", marginLeft: "auto" }}>← Back</button>
-            </div>
-            <AdminCharManager user={adminUser} onUpdate={(newChars) => {
-              API.patch(`/api/admin/user/${encodeURIComponent(adminUser.username)}`, { characters: newChars })
-                .then(() => setAdminUser(prev => ({ ...prev, characters: newChars })))
-                .catch(e => alert("Save failed: " + e.message));
-            }} />
-          </>}
-        </div>
-      </div></div>}
     </div>
   );
 }
