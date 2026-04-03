@@ -838,7 +838,6 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                 </div>
               </div>
             </div>
-          </div>
             {/* Color legend */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, padding: "4px 0" }}>
               {[
