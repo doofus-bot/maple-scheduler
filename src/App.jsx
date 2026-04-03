@@ -162,6 +162,17 @@ const globalCSS = `@import url('https://fonts.googleapis.com/css2?family=Fredoka
 *{box-sizing:border-box;margin:0;padding:0}body{background:#0b0e1a}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
 input::placeholder,textarea::placeholder{color:#475569}select option{background:#141829;color:#e2e8f0}`;
 
+/* Smart tooltip position — flips above cursor when near bottom of viewport */
+function smartTip(e, tipH = 150) {
+  const tipW = 240;
+  const flipX = e.clientX + tipW + 20 > window.innerWidth;
+  const flipY = e.clientY + tipH + 20 > window.innerHeight;
+  return {
+    left: flipX ? e.clientX - tipW - 14 : e.clientX + 14,
+    top: flipY ? e.clientY - tipH - 14 : e.clientY + 14,
+  };
+}
+
 const S = {
   overlay: { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn 0.15s ease" },
   modal: { background: "linear-gradient(160deg,#141829 0%,#0b0e1a 100%)", border: "1px solid #1e2440", borderRadius: 16, width: "min(540px,92vw)", maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 80px rgba(0,0,0,.5)", animation: "slideUp .2s ease" },
@@ -484,7 +495,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
   const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
-  const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (!settingTime && pos) setHoverCell(pos); };
+  const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (pos) setHoverCell(pos); };
   const [hoverCell, setHoverCell] = useState(null);
   const [hoverCellPos, setHoverCellPos] = useState(null);
   const getCellInfo = (day, slot) => {
@@ -782,17 +793,17 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
               })}
             </div>
           </div>
-          <div style={{ ...BACKDROP, padding: 10 }}>
-            {settingTime && <div style={{ fontSize: 11, color: "#10b981", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>Click a time slot{timeAnchor ? ` \u2014 ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
+          <div style={{ ...BACKDROP, padding: 10, ...(settingTime ? { border: "1px solid rgba(239,68,68,.4)", background: "rgba(239,68,68,.06)", boxShadow: "inset 0 0 30px rgba(239,68,68,.08)" } : {}) }}>
+            {settingTime && <div style={{ fontSize: 11, color: "#f87171", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, marginBottom: 6 }}>🔴 Editing — Click a time slot{timeAnchor ? ` \u2014 ${slotToTime(timeAnchor.slot)} ${DAYS_SHORT[timeAnchor.day]}` : ""}</div>}
             <div ref={gridRef} style={{ position: "relative", userSelect: "none", cursor: settingTime ? "pointer" : "default", overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
-              onClick={onGridClick} onMouseMove={e => { onGridMove(e); if (!settingTime) { const tipW = 200; const flipX = e.clientX + tipW + 20 > window.innerWidth; setHoverCellPos({ left: flipX ? e.clientX - tipW - 14 : e.clientX + 14, top: Math.min(e.clientY + 14, window.innerHeight - 100) }); } }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
+              onClick={onGridClick} onMouseMove={e => { onGridMove(e); setHoverCellPos(smartTip(e, 120)); }} onMouseLeave={() => { setTimeHover(null); setHoverTime(null); setHoverCell(null); setHoverCellPos(null); }}>
               <div style={{ display: "flex", height: 28, position: "sticky", top: 0, zIndex: 12, background: "rgba(11,14,26,.98)" }}>
                 <div style={{ width: 36, flexShrink: 0 }} />
                 {DAY_ORDER.map(di => (
                   <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 700, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.6)" }}>{DAYS_SHORT[di]}</div>
                 ))}
               </div>
-              <div style={{ display: "flex", height: 48 * 20 }}>
+              <div style={{ display: "flex", height: 48 * 20, position: "relative" }}>
                 <div style={{ width: 36, flexShrink: 0, position: "relative" }}>
                   {Array.from({ length: 48 }, (_, si) => {
                     if (si % 2 !== 0) return null;
@@ -826,6 +837,22 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
                   <span style={{ position: "absolute", right: 4, top: -11, fontSize: 7, color: "#f87171", fontWeight: 600, background: "rgba(11,14,26,.8)", padding: "1px 3px", borderRadius: 2, whiteSpace: "nowrap" }}>0:00 UTC</span>
                 </div>
               </div>
+            </div>
+          </div>
+            {/* Color legend */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, padding: "4px 0" }}>
+              {[
+                { bg: "rgba(34,197,94,.35)", label: "All available" },
+                { bg: "rgba(251,191,36,.18)", label: "Some available" },
+                { bg: "rgba(239,68,68,.22)", label: "None available" },
+                { bg: "rgba(251,146,36,.35)", label: "Conflict" },
+                { bg: "rgba(37,99,235,.5)", label: "Scheduled" },
+              ].map(({ bg, label }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: "1px solid rgba(255,255,255,.1)" }} />
+                  <span style={{ fontSize: 8, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -867,7 +894,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
           </div>
         </div>
       </div></div>}
-      {hoverCell && hoverCellPos && !settingTime && (() => {
+      {hoverCell && hoverCellPos && (() => {
         const info = getCellInfoFiltered(hoverCell.day, hoverCell.slot);
         if (info.ac === info.tot && info.bc === 0) return null;
         return <div style={{ position: "fixed", zIndex: 200, pointerEvents: "none", ...hoverCellPos }}>
@@ -997,7 +1024,7 @@ function ProfileModal({ user, onClose, onSave }) {
               <div key={di} style={{ flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", lineHeight: "28px", borderBottom: "1px solid rgba(30,36,64,.4)" }}>{DAYS_SHORT[di]}</div>
             ))}
           </div>
-          <div style={{ display: "flex", height: 48 * 18 }}>
+          <div style={{ display: "flex", height: 48 * 18, position: "relative" }}>
             {/* Time labels */}
             <div style={{ width: 40, flexShrink: 0, position: "relative" }}>
               {Array.from({ length: 48 }, (_, si) => {
@@ -1344,8 +1371,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                 return (
                   <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                     onClick={() => !editing && onClickParty(p)}
-                    onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); } }}
-                    onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                    onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos(smartTip(e)); } }}
+                    onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
                     onMouseLeave={() => setHoverParty(null)}
                     style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
@@ -1446,8 +1473,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
                   return (
                     <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
                       onClick={() => !editing && onClickParty(p)}
-                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); } }}
-                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
+                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos(smartTip(e)); } }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
                       onMouseLeave={() => setHoverParty(null)}
                       style={{
                       position: "absolute", top: visTop + 1, left: 2, right: 2,
@@ -1524,8 +1551,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
             const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
             return (
               <div key={p.id} onClick={() => onClickParty(p)}
-                onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); }}
-                onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
+                onMouseEnter={e => { setHoverParty(p); setHoverPos(smartTip(e)); }}
+                onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
                 onMouseLeave={() => setHoverParty(null)}
                 style={{
                   display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
@@ -1752,8 +1779,8 @@ function CharactersView({ parties, user, onCreateParty, onClickParty, onCreateSo
                     {p && (() => {
                       const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
                       return <button onClick={() => onClickParty(p)}
-                        onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 }); }}
-                        onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: e.clientX + 12, top: e.clientY - 10 })}
+                        onMouseEnter={e => { setHoverParty(p); setHoverPos(smartTip(e)); }}
+                        onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
                         onMouseLeave={() => setHoverParty(null)}
                         style={{ padding: 0, borderRadius: 6, cursor: "pointer", background: "transparent", border: "none" }}>
                         <DiffBadge difficulty={b?.difficulty} medium />
@@ -2010,8 +2037,8 @@ function ShareView({ token }) {
                   const dimmed = sharedOnly && !shared;
                   return (
                     <div key={p.id}
-                      onMouseEnter={e => { setHoverParty(p); setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 }); }}
-                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos({ left: Math.min(e.clientX + 14, window.innerWidth - 240), top: e.clientY + 14 })}
+                      onMouseEnter={e => { setHoverParty(p); setHoverPos(smartTip(e)); }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
                       onMouseLeave={() => setHoverParty(null)}
                       style={{
                       position: "absolute", top: visTop + 1, left: 2, right: 2,
