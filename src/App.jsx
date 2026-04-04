@@ -402,6 +402,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
   const [addDiscord, setAddDiscord] = useState("");
   const [ignPopup, setIgnPopup] = useState(null);
   const [charConflict, setCharConflict] = useState(null); // { newName, oldName, otherParty, memberIdx }
+  const [monthlyDatePick, setMonthlyDatePick] = useState(null); // { day, hour, min, duration } — awaiting date selection
   const addRef = useRef(null);
   const gridRef = useRef(null);
   const maxP = party.maxMembers || 6;
@@ -494,7 +495,7 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
     return { day: DAY_ORDER[col], slot: s };
   };
   const slotToTime = (s) => { const h = Math.floor(s / 2); const m = (s % 2) * 30; return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); /* max 4 slots = 2hrs */ const durMin = durSlots * 30; onUpdate({ ...party, utcDay: pos.day, utcHour: Math.floor(ss / 2), utcMin: (ss % 2) * 30, duration: durMin }); } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
+  const onGridClick = (e) => { if (!settingTime) return; const pos = getSlot(e); if (!pos) return; if (!timeAnchor) setTimeAnchor(pos); else { if (pos.day === timeAnchor.day) { const ss = Math.min(timeAnchor.slot, pos.slot); const es = Math.max(timeAnchor.slot, pos.slot); const durSlots = Math.min(es - ss + 1, 4); const durMin = durSlots * 30; const newHour = Math.floor(ss / 2); const newMin = (ss % 2) * 30; if (monthly) { setMonthlyDatePick({ day: pos.day, hour: newHour, min: newMin, duration: durMin }); } else { onUpdate({ ...party, utcDay: pos.day, utcHour: newHour, utcMin: newMin, duration: durMin }); } } setSettingTime(false); setTimeAnchor(null); setTimeHover(null); } };
   const onGridMove = (e) => { const pos = getSlot(e); setHoverTime(pos); if (settingTime) setTimeHover(pos); if (pos) setHoverCell(pos); };
   const [hoverCell, setHoverCell] = useState(null);
   const [hoverCellPos, setHoverCellPos] = useState(null);
@@ -578,17 +579,17 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {isLead && <>
-            {!monthly && <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
+            <button style={{ fontSize: 11, padding: "5px 12px", borderRadius: 8, border: `1px solid ${settingTime ? ACCENT_BORDER : "#1e2440"}`, cursor: "pointer", fontWeight: 700, fontFamily: "'Comfortaa',sans-serif", background: settingTime ? ACCENT_LIGHT : "rgba(255,255,255,.04)", color: settingTime ? ACCENT : "#94a3b8" }} onClick={() => {
               if (settingTime && timeAnchor) onUpdate({ ...party, utcDay: timeAnchor.day, utcHour: Math.floor(timeAnchor.slot / 2), utcMin: (timeAnchor.slot % 2) * 30, duration: party.duration || 30 });
               setSettingTime(!settingTime); setTimeAnchor(null); setTimeHover(null);
               if (!expandSchedule) setExpandSchedule(true);
-            }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>}
-            {!monthly && <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
+            }}>{settingTime ? "✓ Done" : "✎ Edit"}</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
               <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) <= 15 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) <= 15 ? 0.3 : 1 }}>{"\u2212"}</button>
               <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
               <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: (party.duration || 30) >= 120 ? "default" : "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", opacity: (party.duration || 30) >= 120 ? 0.3 : 1 }}>+</button>
-            </div>}
-            {monthly && party.scheduledDate && <button onClick={() => onUpdate({ ...party, scheduledDate: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
+            </div>
+            {monthly && party.scheduledDate && !settingTime && <button onClick={() => onUpdate({ ...party, scheduledDate: null, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!monthly && party.utcDay != null && !settingTime && <button onClick={() => onUpdate({ ...party, utcDay: null, utcHour: null, utcMin: null })} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.2)" }}>Unschedule</button>}
             {!confirmDelete && <button onClick={() => setConfirmDelete(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f87171", borderColor: "rgba(239,68,68,.2)" }}>Delete</button>}
             {confirmDelete && <>
@@ -604,45 +605,31 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
         {/* LEFT — Timestamp + Drops + Members */}
         <div style={{ flex: expandSchedule ? 1 : 2, minWidth: 0, display: "flex", flexDirection: "column", gap: 10, transition: "flex .25s ease" }}>
           {/* Timestamp / Scheduling box */}
-          {monthly && (() => {
-            const run = party.scheduledDate ? getNextRunMonthly(party.scheduledDate, party.utcHour, party.utcMin, party.duration) : null;
-            const discordText = run ? `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>` : "";
-            const copyIt = () => { if (discordText) navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
-            return <div style={{ ...BACKDROP, padding: "10px 14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif", letterSpacing: ".04em" }}>MONTHLY</span>
+          {monthly && party.scheduledDate && (() => {
+            const run = getNextRunMonthly(party.scheduledDate, party.utcHour, party.utcMin, party.duration);
+            if (!run) return null;
+            const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
+            const copyIt = () => { navigator.clipboard.writeText(discordText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); };
+            return <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif", flexShrink: 0 }}>MONTHLY</span>
+              <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: run.isPast ? "#f87171" : ACCENT, marginBottom: 2 }}>
+                  {run.localDateStr} ({run.localDay}) · {run.resetLabel}
+                  {run.isPast && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,.15)", color: "#f87171", marginLeft: 8 }}>Past</span>}
+                </div>
+                <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                  <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
+                </div>
               </div>
-              {isLead && (
-                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: run ? 10 : 0 }}>
-                  <div><label style={{ ...S.label, marginBottom: 4 }}>Date</label>
-                    <input type="date" value={party.scheduledDate || ""} onChange={e => onUpdate({ ...party, scheduledDate: e.target.value || null })}
-                      style={{ ...S.input, width: 150, fontSize: 12, padding: "6px 10px" }} /></div>
-                  <div><label style={{ ...S.label, marginBottom: 4 }}>Time</label>
-                    <input type="time" value={party.utcHour != null ? `${String(party.utcHour).padStart(2,"0")}:${String(party.utcMin || 0).padStart(2,"0")}` : ""}
-                      onChange={e => { const [h, m] = (e.target.value || "0:0").split(":").map(Number); onUpdate({ ...party, utcHour: h, utcMin: m }); }}
-                      style={{ ...S.input, width: 110, fontSize: 12, padding: "6px 10px" }} /></div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 6, border: "1px solid #1e2440", background: "rgba(255,255,255,.02)" }}>
-                    <button onClick={() => { const d = Math.max(15, (party.duration || 30) - 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u2212"}</button>
-                    <span style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif", fontWeight: 600, minWidth: 32, textAlign: "center" }}>{party.duration || 30}m</span>
-                    <button onClick={() => { const d = Math.min(120, (party.duration || 30) + 15); onUpdate({ ...party, duration: d }); }} style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-                  </div>
-                </div>
-              )}
-              {!isLead && !run && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", fontStyle: "italic" }}>Not yet scheduled by party lead</div>}
-              {run && <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: run.isPast ? "#f87171" : ACCENT, marginBottom: 2 }}>
-                    {run.localDateStr} ({run.localDay}) · {run.resetLabel}
-                    {run.isPast && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,.15)", color: "#f87171", marginLeft: 8 }}>Past</span>}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
-                    <span>{`<t:${run.startUnix}:R>`}</span> · <span>{`<t:${run.startUnix}:F>`}</span> - <span>{`<t:${run.endUnix}:t>`}</span>
-                  </div>
-                </div>
-                <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "\u2713" : "\ud83d\udccb"}</button>
-              </div>}
+              <button onClick={copyIt} title="Copy for Discord" style={{ width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer", background: copied ? "rgba(34,197,94,.2)" : "rgba(255,255,255,.06)", color: copied ? "#10b981" : "#64748b", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}>{copied ? "\u2713" : "\ud83d\udccb"}</button>
             </div>;
           })()}
+          {monthly && !party.scheduledDate && party.utcDay != null && (
+            <div style={{ ...BACKDROP, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif", flexShrink: 0 }}>MONTHLY</span>
+              <span style={{ fontSize: 11, color: "#f59e0b", fontFamily: "'Comfortaa',sans-serif" }}>Time set — select a date via Edit to finalize</span>
+            </div>
+          )}
           {!monthly && party.utcDay != null && (() => {
             const run = getNextRun(party.utcDay, party.utcHour, party.utcMin, party.duration);
             const discordText = `${run.resetLabel}\n<t:${run.startUnix}:R>\n<t:${run.startUnix}:F> - <t:${run.endUnix}:t>`;
@@ -856,6 +843,65 @@ function PartyPage({ party, allParties, allUsers, currentUser, onUpdate, onBatch
           </div>
         </div>
       </div>
+
+      {/* Monthly date picker popup */}
+      {monthlyDatePick && (() => {
+        const targetJsDay = (monthlyDatePick.day + 1) % 7; // 0=Mon..6=Sun → JS 0=Sun..6=Sat
+        const dates = [];
+        const now = new Date();
+        const curMonth = now.getMonth();
+        const curYear = now.getFullYear();
+        // Generate matching weekday dates for this month and next
+        for (let mo = curMonth; mo <= curMonth + 1; mo++) {
+          const realMo = mo % 12;
+          const realYr = mo > 11 ? curYear + 1 : curYear;
+          const daysInMonth = new Date(realYr, realMo + 1, 0).getDate();
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dt = new Date(realYr, realMo, d);
+            if (dt.getDay() === targetJsDay) {
+              // Only show dates from today onward
+              const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              if (dt >= todayStart) {
+                dates.push(dt);
+              }
+            }
+          }
+        }
+        const dayName = DAYS[monthlyDatePick.day];
+        const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+        return <div style={S.popOverlay} onClick={() => setMonthlyDatePick(null)}>
+          <div style={S.popBox} onClick={e => e.stopPropagation()}>
+            <div style={S.popHead}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>Select Date</span>
+              <button style={S.closeBtn} onClick={() => setMonthlyDatePick(null)}>✕</button>
+            </div>
+            <div style={{ padding: "12px 18px" }}>
+              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 10 }}>
+                {dayName}s at {fmtTime(monthlyDatePick.hour, monthlyDatePick.min)} · {monthlyDatePick.duration}m
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {dates.map(dt => {
+                  const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+                  const label = dt.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+                  const isToday = dt.toDateString() === now.toDateString();
+                  return <button key={dateStr} onClick={() => {
+                    onUpdate({ ...party, utcDay: monthlyDatePick.day, utcHour: monthlyDatePick.hour, utcMin: monthlyDatePick.min, duration: monthlyDatePick.duration, scheduledDate: dateStr });
+                    setMonthlyDatePick(null);
+                  }} style={{
+                    padding: "8px 14px", borderRadius: 6, border: `1px solid ${isToday ? "rgba(139,92,246,.4)" : "#1e2440"}`,
+                    background: isToday ? "rgba(139,92,246,.12)" : "rgba(255,255,255,.03)", cursor: "pointer",
+                    color: "#e2e8f0", fontSize: 13, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span>{label}</span>
+                    {isToday && <span style={{ fontSize: 9, color: "#a78bfa", fontWeight: 700 }}>Today</span>}
+                  </button>;
+                })}
+              </div>
+            </div>
+          </div>
+        </div>;
+      })()}
 
       {ignPopup && <IGNPopup title="Temp Character Name" hint="Name for temp slot." onConfirm={ign => addTemp(ign)} onClose={() => setIgnPopup(null)} />}
       {/* Character conflict dialog */}
@@ -1213,6 +1259,18 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const m = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], unscheduled: [] };
     weeklyParties.forEach(p => { if (p.utcDay != null) (m[p.utcDay] || []).push(p); });
     displayList.forEach(p => { if (p.utcDay == null) m.unscheduled.push(p); });
+    // Include monthly parties whose scheduledDate falls within the next 7 days
+    monthlyParties.forEach(p => {
+      if (!p.scheduledDate || p.utcDay == null) return;
+      const [sY, sMo, sD] = p.scheduledDate.split("-").map(Number);
+      const bossDate = new Date(sY, sMo - 1, sD);
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekEnd = new Date(todayStart); weekEnd.setDate(weekEnd.getDate() + 7);
+      if (bossDate >= todayStart && bossDate < weekEnd) {
+        (m[p.utcDay] || []).push(p);
+      }
+    });
     m.unscheduled.sort((a, b) => {
       const aSolo = (a.members?.length || 0) <= 1 ? 1 : 0;
       const bSolo = (b.members?.length || 0) <= 1 ? 1 : 0;
@@ -1614,6 +1672,40 @@ function CharRow({ name, index, total, onMove, onRemove }) {
       <button onClick={() => onRemove(index)} style={{ width: 24, height: 24, borderRadius: 5, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
     </div>
   );
+}
+
+function AdminCharManager({ user, onUpdate }) {
+  const [chars, setChars] = useState(user.characters || []);
+  const [newChar, setNewChar] = useState("");
+  useEffect(() => { setChars(user.characters || []); }, [user.characters]);
+  const add = () => { const n = newChar.trim(); if (n && !chars.includes(n)) { const nc = [...chars, n]; setChars(nc); onUpdate(nc); setNewChar(""); } };
+  const rm = (i) => { const nc = chars.filter((_, j) => j !== i); setChars(nc); onUpdate(nc); };
+  const move = (i, dir) => { const nc = [...chars]; [nc[i], nc[i + dir]] = [nc[i + dir], nc[i]]; setChars(nc); onUpdate(nc); };
+  return <div>
+    <label style={S.label}>Characters ({chars.length})</label>
+    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+      <input style={S.input} placeholder="Add character IGN..." value={newChar} onChange={e => setNewChar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+      <button style={{ ...S.btnPrimary, whiteSpace: "nowrap", opacity: newChar.trim() ? 1 : .4 }} onClick={add}>＋ Add</button>
+    </div>
+    {chars.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid rgba(30,36,64,.5)", borderRadius: 8, overflow: "hidden" }}>
+      {chars.map((c, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: i % 2 === 0 ? "rgba(11,14,26,.3)" : "rgba(11,14,26,.15)", borderBottom: i < chars.length - 1 ? "1px solid rgba(30,36,64,.3)" : "none" }}>
+          <span style={{ fontSize: 11, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", width: 18, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
+          <CharAvatar name={c} size={24} />
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#e2e8f0", fontFamily: "'Comfortaa',sans-serif" }}>{c}</span>
+          <CharJobLevel name={c} />
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            <button onClick={() => i > 0 && move(i, -1)} disabled={i === 0}
+              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === 0 ? "#1e2440" : "#94a3b8", cursor: i === 0 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25b2"}</button>
+            <button onClick={() => i < chars.length - 1 && move(i, 1)} disabled={i === chars.length - 1}
+              style={{ width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: i === chars.length - 1 ? "#1e2440" : "#94a3b8", cursor: i === chars.length - 1 ? "default" : "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u25bc"}</button>
+          </div>
+          <button onClick={() => rm(i)} style={{ width: 20, height: 20, borderRadius: 4, border: "none", cursor: "pointer", background: "rgba(239,68,68,.15)", color: "#f87171", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{"\u2715"}</button>
+        </div>
+      ))}
+    </div>}
+    {chars.length === 0 && <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", padding: 12, textAlign: "center" }}>No characters registered</div>}
+  </div>;
 }
 
 function ManageCharactersModal({ chars, onSave, onClose }) {
@@ -2093,6 +2185,9 @@ export default function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [createDefaults, setCreateDefaults] = useState({});
   const [showProfile, setShowProfile] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminUser, setAdminUser] = useState(null);
+  const [adminSearch, setAdminSearch] = useState("");
   const [selectedParty, setSelectedParty] = useState(null);
   const [trash, setTrash] = useState({});
   const [view, setView] = useState("schedule");
@@ -2252,6 +2347,7 @@ export default function App() {
           <button onClick={() => navTo("schedule")} style={{ ...S.btnGhost, ...(view === "schedule" ? S.btnActive : {}) }}>Schedule</button>
           <button onClick={() => navTo("characters")} style={{ ...S.btnGhost, ...(view === "characters" ? S.btnActive : {}) }}>Characters</button>
           <button style={{ ...S.btnGhost, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowProfile(true)}>{user.avatar && <img src={user.avatar} style={{ width: 20, height: 20, borderRadius: "50%" }} alt="" />}{user.username}</button>
+          {user.isAdmin && <button onClick={() => setShowAdmin(true)} style={{ ...S.btnGhost, fontSize: 11, padding: "5px 10px", color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}>⚙ Admin</button>}
         </div>
       </div>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 20px", position: "relative", zIndex: 1, overflow: "hidden" }}>
@@ -2267,6 +2363,37 @@ export default function App() {
       </div>
       {showCreate && <CreatePartyModal onClose={() => { setShowCreate(false); setCreateDefaults({}); }} onSave={handleCreate} currentUser={user} defaultBoss={createDefaults.boss} defaultDiff={createDefaults.diff} defaultChar={createDefaults.char} />}
       {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} onSave={handleSaveProfile} />}
+      {showAdmin && <div style={S.overlay} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}><div style={{ ...S.modal, width: "min(540px,92vw)" }} onClick={e => e.stopPropagation()}>
+        <div style={S.modalHead}><span style={S.modalTitle}>Admin — Manage User Characters</span><button style={S.closeBtn} onClick={() => { setShowAdmin(false); setAdminUser(null); setAdminSearch(""); }}>✕</button></div>
+        <div style={S.modalBody}>
+          {!adminUser ? <>
+            <label style={S.label}>Discord Username</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input style={S.input} placeholder="Enter Discord username..." value={adminSearch} onChange={e => setAdminSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && adminSearch.trim()) {
+                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
+              }}} />
+              <button style={{ ...S.btnPrimary, whiteSpace: "nowrap" }} onClick={() => {
+                if (!adminSearch.trim()) return;
+                API.get(`/api/admin/user/${encodeURIComponent(adminSearch.trim())}`).then(d => { if (!d || d.error) alert(d?.error || "User not found"); else setAdminUser(d); });
+              }}>Search</button>
+            </div>
+          </> : <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              {adminUser.avatar && <img src={adminUser.avatar} style={{ width: 32, height: 32, borderRadius: "50%" }} alt="" />}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{adminUser.username}</div>
+                <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>ID: {adminUser.id}</div>
+              </div>
+              <button onClick={() => setAdminUser(null)} style={{ ...S.btnGhost, fontSize: 10, padding: "3px 10px", marginLeft: "auto" }}>← Back</button>
+            </div>
+            <AdminCharManager user={adminUser} onUpdate={(newChars) => {
+              API.patch(`/api/admin/user/${encodeURIComponent(adminUser.username)}`, { characters: newChars })
+                .then(() => setAdminUser(prev => ({ ...prev, characters: newChars })))
+                .catch(e => alert("Save failed: " + e.message));
+            }} />
+          </>}
+        </div>
+      </div></div>}
     </div>
   );
 }
