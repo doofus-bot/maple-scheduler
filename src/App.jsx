@@ -22,7 +22,7 @@ const BOSS_DROPS = {
 };
 const BOSS_ORDER = ["Baldrix", "Limbo", "Kaling", "Adversary", "Kalos", "Seren", "Black Mage", "Lotus", "Ctene", "Other"];
 const BOSS_LEVEL_REQ = { Seren: 260, Kalos: 265, Adversary: 270, Kaling: 275, Limbo: 285, Baldrix: 290 };
-const MONTHLY_BOSSES = new Set(["Black Mage|Extreme"]);
+const MONTHLY_BOSSES = new Set(["Black Mage|Hard", "Black Mage|Extreme"]);
 const isMonthlyBoss = (bossName, diff) => MONTHLY_BOSSES.has(`${bossName}|${diff}`);
 const DIFF_ABBR = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
 const DIFF_COLORS = { Easy: "#989898", Normal: "#49B8C6", Hard: "#CE506D", Chaos: "#DCBA87", Extreme: "#ED7421" };
