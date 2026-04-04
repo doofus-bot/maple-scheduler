@@ -41,6 +41,25 @@ db.exec(`
   INSERT OR IGNORE INTO parties_store (id, data) VALUES (1, '{}');
 `);
 
+// Migration — flag existing Black Mage Hard/Extreme parties as monthly
+try {
+  const row = db.prepare("SELECT data FROM parties_store WHERE id = 1").get();
+  if (row?.data) {
+    const parties = JSON.parse(row.data);
+    let changed = false;
+    for (const pid of Object.keys(parties)) {
+      const p = parties[pid];
+      const boss = p.bosses?.[0];
+      if (boss && boss.bossName === "Black Mage" && (boss.difficulty === "Hard" || boss.difficulty === "Extreme") && !p.isMonthly) {
+        p.isMonthly = true;
+        changed = true;
+        console.log(`🔄 Migrated party ${pid} (${boss.difficulty} Black Mage) to monthly`);
+      }
+    }
+    if (changed) db.prepare("UPDATE parties_store SET data = ? WHERE id = 1").run(JSON.stringify(parties));
+  }
+} catch (e) { console.error("Monthly migration error:", e); }
+
 // Migration — add settings column if missing
 try { db.prepare("ALTER TABLE users ADD COLUMN settings TEXT DEFAULT '{}'").run(); } catch {}
 // Migration — add share_token column
@@ -196,7 +215,7 @@ app.get("/api/me", requireAuth, (req, res) => {
   const u = req.user;
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
 });
 
 app.patch("/api/me", requireAuth, (req, res) => {
@@ -211,7 +230,7 @@ app.patch("/api/me", requireAuth, (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const settings = JSON.parse(u.settings || "{}");
   res.json({ id: u.id, username: u.username, avatar: u.avatar, timezone: u.timezone, shareToken: u.share_token || null,
-    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), ...settings });
+    characters: JSON.parse(u.characters || "[]"), availability: JSON.parse(u.availability || "{}"), isAdmin: ADMIN_IDS.includes(u.id), ...settings });
 });
 
 app.get("/api/users", requireAuth, (req, res) => {
@@ -303,6 +322,30 @@ app.get("/api/nexon/:name", async (req, res) => {
 });
 
 /* ════════════════════════════════════════
+   ADMIN ENDPOINTS
+   ════════════════════════════════════════ */
+const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",").map(s => s.trim()).filter(Boolean);
+const requireAdmin = (req, res, next) => {
+  if (!req.user || !ADMIN_IDS.includes(req.user.id)) return res.status(403).json({ error: "Not authorized" });
+  next();
+};
+
+app.get("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
+  const u = db.prepare("SELECT id, username, characters, avatar FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  res.json({ id: u.id, username: u.username, characters: JSON.parse(u.characters || "[]"), avatar: u.avatar });
+});
+
+app.patch("/api/admin/user/:username", requireAuth, requireAdmin, (req, res) => {
+  const { characters } = req.body;
+  if (!characters) return res.status(400).json({ error: "characters required" });
+  const u = db.prepare("SELECT id FROM users WHERE LOWER(username) = LOWER(?)").get(req.params.username);
+  if (!u) return res.status(404).json({ error: "User not found" });
+  db.prepare("UPDATE users SET characters = ? WHERE id = ?").run(JSON.stringify(characters), u.id);
+  res.json({ success: true, characters });
+});
+
+/* ════════════════════════════════════════
    TEST NOTIFICATION ENDPOINT
    ════════════════════════════════════════ */
 app.post("/api/me/test-notification", requireAuth, async (req, res) => {
@@ -335,7 +378,7 @@ app.post("/api/me/test-notification", requireAuth, async (req, res) => {
    DAILY SUMMARY BUILDER
    ════════════════════════════════════════ */
 const DIFF_ABBR_SERVER = { Easy: "E", Normal: "N", Hard: "H", Chaos: "C", Extreme: "X" };
-const MONTHLY_BOSSES_SERVER = new Set(["Black Mage|Extreme"]);
+const MONTHLY_BOSSES_SERVER = new Set(["Black Mage|Hard", "Black Mage|Extreme"]);
 const isMonthlyServer = (bossName, diff) => MONTHLY_BOSSES_SERVER.has(`${bossName}|${diff}`);
 
 function buildDailySummary(userId, username, userTZ) {
