@@ -1225,6 +1225,8 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
   const [undoStack, setUndoStack] = useState([]);
   const [hoverParty, setHoverParty] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState("unscheduled");
+  const [monthlyDatePick, setMonthlyDatePick] = useState(null); // { party, day, hour, min, duration }
   const displayList = showSolos ? weeklyParties : weeklyParties.filter(p => (p.members?.length || 0) > 1);
   const gridRef = useRef(null);
 
@@ -1338,8 +1340,12 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
     const snappedMin = magnetize(dragPos.day, dragPos.totalMin, durMin, dragging.id);
     if (snappedMin != null) {
       const h = Math.floor(snappedMin / 60); const m = snappedMin % 60;
-      setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
-      onUpdateParty({ ...dragging, utcDay: dragPos.day, utcHour: h, utcMin: m });
+      if (dragging.isMonthly) {
+        setMonthlyDatePick({ party: dragging, day: dragPos.day, hour: h, min: m, duration: durMin });
+      } else {
+        setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]);
+        onUpdateParty({ ...dragging, utcDay: dragPos.day, utcHour: h, utcMin: m });
+      }
     }
     setDragging(null); setDragPos(null);
   };
@@ -1416,46 +1422,124 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
           {editing && <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 6 }}>Drag parties to reschedule</div>}
         </div>
 
-        {/* Unscheduled */}
-        <div style={{ ...BACKDROP, padding: 12, ...(editing && dragging && dragging.utcDay != null ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
+        {/* Tabbed: Unscheduled / Monthly */}
+        <div style={{ ...BACKDROP, padding: 0, overflow: "hidden", ...(editing && dragging && dragging.utcDay != null && sidebarTab === "unscheduled" ? { border: "2px dashed rgba(251,191,36,.4)", background: "rgba(251,191,36,.04)" } : {}) }}
           onDragOver={editing ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
-          onDrop={editing ? (e) => { e.preventDefault(); if (dragging && dragging.utcDay != null) { setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]); onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null }); } setDragging(null); setDragPos(null); } : undefined}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 8, fontFamily: "'Fredoka',sans-serif" }}>Unscheduled</div>
-          {byDay.unscheduled.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {byDay.unscheduled.map(p => {
-                const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1; const dur = p.duration || 30;
-                return (
-                  <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
-                    onClick={() => !editing && onClickParty(p)}
-                    onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos(smartTip(e)); } }}
-                    onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
-                    onMouseLeave={() => setHoverParty(null)}
-                    style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
-                          <span style={{ marginLeft: 6 }}><DiffBadge difficulty={b?.difficulty} inline /></span>
-                          {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
+          onDrop={editing && sidebarTab === "unscheduled" ? (e) => { e.preventDefault(); if (dragging && dragging.utcDay != null) { setUndoStack(prev => [...prev, { id: dragging.id, utcDay: dragging.utcDay, utcHour: dragging.utcHour, utcMin: dragging.utcMin }]); onUpdateParty({ ...dragging, utcDay: null, utcHour: null, utcMin: null, ...(dragging.isMonthly ? { scheduledDate: null } : {}) }); } setDragging(null); setDragPos(null); } : undefined}>
+          {/* Tabs */}
+          <div style={{ display: "flex", borderBottom: "1px solid rgba(30,36,64,.6)" }}>
+            {["unscheduled", "monthly"].map(tab => (
+              <button key={tab} onClick={() => setSidebarTab(tab)} style={{
+                flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 700, fontFamily: "'Fredoka',sans-serif",
+                background: sidebarTab === tab ? "rgba(255,255,255,.04)" : "transparent",
+                border: "none", borderBottom: sidebarTab === tab ? `2px solid ${tab === "monthly" ? "#a78bfa" : ACCENT}` : "2px solid transparent",
+                color: sidebarTab === tab ? (tab === "monthly" ? "#a78bfa" : "#e2e8f0") : "#475569",
+                cursor: "pointer", transition: "all .15s",
+              }}>
+                {tab === "unscheduled" ? `Unscheduled (${byDay.unscheduled.length})` : `Monthly (${monthlyParties.length})`}
+              </button>
+            ))}
+          </div>
+          <div style={{ padding: 12 }}>
+          {sidebarTab === "unscheduled" ? (<>
+            {byDay.unscheduled.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {byDay.unscheduled.map(p => {
+                  const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8"; const solo = p.members?.length === 1; const dur = p.duration || 30;
+                  return (
+                    <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
+                      onClick={() => !editing && onClickParty(p)}
+                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos(smartTip(e)); } }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
+                      onMouseLeave={() => setHoverParty(null)}
+                      style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer", background: solo ? "rgba(34,197,94,.06)" : `${dc}10`, border: `1px solid ${solo ? "rgba(34,197,94,.2)" : dc + "25"}`, userSelect: "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                            <span style={{ marginLeft: 6 }}><DiffBadge difficulty={b?.difficulty} inline /></span>
+                            {solo && <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 4, color: "#10b981" }}>Solo</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{p.members?.[0]?.charName || "\u2014"}</div>
                         </div>
-                        <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>{p.members?.[0]?.charName || "\u2014"}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u2212"}</button>
-                        <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 30, textAlign: "center" }}>{dur}m</span>
-                        <button onClick={() => changeDuration(p, 15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u2212"}</button>
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 30, textAlign: "center" }}>{dur}m</span>
+                          <button onClick={() => changeDuration(p, 15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : editing ? (
-            <div style={{ padding: "16px 0", textAlign: "center", fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop here to unschedule</div>
-          ) : (
-            <div style={{ fontSize: 11, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>None</div>
-          )}
+                  );
+                })}
+              </div>
+            ) : editing ? (
+              <div style={{ padding: "16px 0", textAlign: "center", fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif" }}>Drop here to unschedule</div>
+            ) : (
+              <div style={{ fontSize: 11, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>None</div>
+            )}
+          </>) : (<>
+            {/* Monthly tab */}
+            {monthlyParties.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {monthlyParties
+                  .sort((a, b) => {
+                    const aS = a.scheduledDate ? 0 : 1; const bS = b.scheduledDate ? 0 : 1;
+                    if (aS !== bS) return aS - bS;
+                    const aRun = a.scheduledDate ? getNextRunMonthly(a.scheduledDate, a.utcHour, a.utcMin, a.duration) : null;
+                    const bRun = b.scheduledDate ? getNextRunMonthly(b.scheduledDate, b.utcHour, b.utcMin, b.duration) : null;
+                    if (aRun && bRun) return aRun.startUnix - bRun.startUnix;
+                    return 0;
+                  })
+                  .map(p => {
+                  const b = p.bosses?.[0]; const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
+                  const solo = (p.members?.length || 0) <= 1;
+                  const run = p.scheduledDate ? getNextRunMonthly(p.scheduledDate, p.utcHour, p.utcMin, p.duration) : null;
+                  const scheduled = !!p.scheduledDate;
+                  const dur = p.duration || 30;
+                  const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+                  return (
+                    <div key={p.id} draggable={editing} onDragStart={editing ? onDragStart(p) : undefined}
+                      onClick={() => !editing && onClickParty(p)}
+                      onMouseEnter={e => { if (!editing) { setHoverParty(p); setHoverPos(smartTip(e)); } }}
+                      onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
+                      onMouseLeave={() => setHoverParty(null)}
+                      style={{ padding: "8px 10px", borderRadius: 8, cursor: editing ? "grab" : "pointer",
+                        background: scheduled ? `${dc}15` : "rgba(20,24,41,.3)",
+                        border: `1px solid ${scheduled ? dc + "40" : "rgba(30,36,64,.3)"}`,
+                        opacity: scheduled ? 1 : 0.5,
+                        userSelect: "none", transition: "opacity .15s",
+                      }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <DiffBadge difficulty={b?.difficulty} inline />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>{b?.bossName}</span>
+                            {solo && <span style={{ fontSize: 9, fontWeight: 700, color: "#10b981" }}>Solo</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#64748b", fontFamily: "'Comfortaa',sans-serif", marginTop: 2 }}>
+                            {p.members?.[0]?.charName || "\u2014"}
+                            {run && <span style={{ marginLeft: 6, color: run.isPast ? "#f87171" : ACCENT, fontWeight: 600 }}>{run.localDateStr} {p.utcHour != null ? fmtTime(p.utcHour, p.utcMin || 0) : ""}</span>}
+                            {run?.isPast && <span style={{ marginLeft: 4, fontSize: 8, color: "#f87171" }}>Past</span>}
+                            {!scheduled && <span style={{ marginLeft: 4, fontStyle: "italic", color: "#475569" }}>Unscheduled</span>}
+                          </div>
+                        </div>
+                        {editing && scheduled && <button onClick={e => { e.stopPropagation(); onUpdateParty({ ...p, scheduledDate: null, utcDay: null, utcHour: null, utcMin: null }); }}
+                          style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(245,158,11,.3)", background: "rgba(245,158,11,.08)", color: "#f59e0b", fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "'Comfortaa',sans-serif", flexShrink: 0 }}>Unsched</button>}
+                        {!editing && <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => changeDuration(p, -15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{"\u2212"}</button>
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", minWidth: 30, textAlign: "center" }}>{dur}m</span>
+                          <button onClick={() => changeDuration(p, 15)} style={{ width: 18, height: 18, borderRadius: 3, border: "1px solid rgba(30,36,64,.6)", background: "rgba(11,14,26,.4)", color: "#94a3b8", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                        </div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "#374151", fontFamily: "'Comfortaa',sans-serif" }}>No monthly bosses</div>
+            )}
+          </>)}
+          </div>
         </div>
 
         {/* Recently Deleted */}
@@ -1579,67 +1663,63 @@ function ScheduleView({ parties, user, onClickParty, onUpdateParty, trash, onRec
         </div>
       </div>
       {hoverParty && hoverPos && <PartyHoverCard party={hoverParty} currentUserId={user.id} style={hoverPos} />}
-    </div>
-    {/* ═══ MONTHLY BOSSES SECTION ═══ */}
-    {monthlyParties.length > 0 && (
-      <div style={{ ...BACKDROP, padding: "12px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>Monthly Bosses</span>
-          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: "rgba(139,92,246,.15)", color: "#a78bfa", fontFamily: "'Comfortaa',sans-serif" }}>MONTHLY</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {monthlyParties
-            .sort((a, b) => {
-              const aRun = a.scheduledDate ? getNextRunMonthly(a.scheduledDate, a.utcHour, a.utcMin, a.duration) : null;
-              const bRun = b.scheduledDate ? getNextRunMonthly(b.scheduledDate, b.utcHour, b.utcMin, b.duration) : null;
-              if (!aRun && !bRun) return 0;
-              if (!aRun) return 1;
-              if (!bRun) return -1;
-              return aRun.startUnix - bRun.startUnix;
-            })
-            .map(p => {
-            const b = p.bosses?.[0];
-            const dc = DIFF_COLORS[b?.difficulty] || "#94a3b8";
-            const run = p.scheduledDate ? getNextRunMonthly(p.scheduledDate, p.utcHour, p.utcMin, p.duration) : null;
-            const solo = (p.members?.length || 0) <= 1;
-            const mc = p.members?.length || 1;
-            const sizeLabel = mc === 1 ? "Solo" : mc === 2 ? "Duo" : mc === 3 ? "Trio" : `${mc}p`;
-            const myChar = p.members?.find(m => m.userId === user.id || m.userId === user.username)?.charName;
-            const fmtTime = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
-            return (
-              <div key={p.id} onClick={() => onClickParty(p)}
-                onMouseEnter={e => { setHoverParty(p); setHoverPos(smartTip(e)); }}
-                onMouseMove={e => hoverParty?.id === p.id && setHoverPos(smartTip(e))}
-                onMouseLeave={() => setHoverParty(null)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
-                  background: solo ? "rgba(160,70,70,.15)" : "rgba(20,24,41,.5)",
-                  border: `1px solid ${solo ? "rgba(196,92,92,.25)" : "rgba(30,36,64,.6)"}`,
-                  transition: "background .15s",
-                }}>
-                <DiffBadge difficulty={b?.difficulty} small />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif", minWidth: 90 }}>{b?.bossName}</span>
-                {run ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, fontFamily: "'Comfortaa',sans-serif" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: run.isPast ? "#f87171" : ACCENT }}>{run.localDateStr}</span>
-                    <span style={{ fontSize: 10, color: "#94a3b8" }}>{p.utcHour != null ? fmtTime(p.utcHour, p.utcMin || 0) : ""}</span>
-                    <span style={{ fontSize: 10, color: "#64748b" }}>{run.resetLabel}</span>
-                    {run.isPast && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(239,68,68,.15)", color: "#f87171" }}>Past</span>}
-                  </div>
-                ) : (
-                  <span style={{ flex: 1, fontSize: 11, color: "#475569", fontFamily: "'Comfortaa',sans-serif", fontStyle: "italic" }}>Not scheduled</span>
-                )}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {myChar && <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif" }}>{myChar}</span>}
-                  <span style={{ fontSize: 9, color: "#64748b", fontFamily: "'Comfortaa',sans-serif" }}>{sizeLabel}</span>
-                </div>
-                <span style={{ fontSize: 12, color: "#475569" }}>›</span>
+      {/* Monthly date picker popup (from drag-and-drop) */}
+      {monthlyDatePick && (() => {
+        const targetJsDay = (monthlyDatePick.day + 1) % 7;
+        const dates = [];
+        const now = new Date();
+        const curMonth = now.getMonth();
+        const curYear = now.getFullYear();
+        for (let mo = curMonth; mo <= curMonth + 1; mo++) {
+          const realMo = mo % 12;
+          const realYr = mo > 11 ? curYear + 1 : curYear;
+          const daysInMonth = new Date(realYr, realMo + 1, 0).getDate();
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dt = new Date(realYr, realMo, d);
+            if (dt.getDay() === targetJsDay) {
+              const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              if (dt >= todayStart) dates.push(dt);
+            }
+          }
+        }
+        const dayName = DAYS[monthlyDatePick.day];
+        const fmtT = (h, m) => { const hr = h % 12 || 12; return `${hr}:${String(m).padStart(2, "0")}${h < 12 ? "a" : "p"}`; };
+        return <div style={S.popOverlay} onClick={() => setMonthlyDatePick(null)}>
+          <div style={S.popBox} onClick={e => e.stopPropagation()}>
+            <div style={S.popHead}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", fontFamily: "'Fredoka',sans-serif" }}>Select Date</span>
+              <button style={S.closeBtn} onClick={() => setMonthlyDatePick(null)}>✕</button>
+            </div>
+            <div style={{ padding: "12px 18px" }}>
+              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Comfortaa',sans-serif", marginBottom: 10 }}>
+                {dayName}s at {fmtT(monthlyDatePick.hour, monthlyDatePick.min)} · {monthlyDatePick.duration}m
               </div>
-            );
-          })}
-        </div>
-      </div>
-    )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 300, overflow: "auto" }}>
+                {dates.map(dt => {
+                  const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+                  const label = dt.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+                  const isToday = dt.toDateString() === now.toDateString();
+                  return <button key={dateStr} onClick={() => {
+                    const p = monthlyDatePick.party;
+                    setUndoStack(prev => [...prev, { id: p.id, utcDay: p.utcDay, utcHour: p.utcHour, utcMin: p.utcMin, scheduledDate: p.scheduledDate }]);
+                    onUpdateParty({ ...p, utcDay: monthlyDatePick.day, utcHour: monthlyDatePick.hour, utcMin: monthlyDatePick.min, duration: monthlyDatePick.duration, scheduledDate: dateStr });
+                    setMonthlyDatePick(null);
+                  }} style={{
+                    padding: "8px 14px", borderRadius: 6, border: `1px solid ${isToday ? "rgba(139,92,246,.4)" : "#1e2440"}`,
+                    background: isToday ? "rgba(139,92,246,.12)" : "rgba(255,255,255,.03)", cursor: "pointer",
+                    color: "#e2e8f0", fontSize: 13, fontWeight: 600, fontFamily: "'Comfortaa',sans-serif",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span>{label}</span>
+                    {isToday && <span style={{ fontSize: 9, color: "#a78bfa", fontWeight: 700 }}>Today</span>}
+                  </button>;
+                })}
+              </div>
+            </div>
+          </div>
+        </div>;
+      })()}
+    </div>
     </div>
   );
 }
